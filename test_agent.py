@@ -14,7 +14,7 @@ from predict_adsorption import (
     build_candidate, build_slab, discover_custom_sites, gas_reference,
     hydrogen_reference, molecule_template,
 )
-from visualize_results import compute_che_states
+from visualize_results import classify_che_comparison, compute_che_states, reaction_rows
 
 
 ROOT = Path(__file__).resolve().parent
@@ -114,6 +114,14 @@ def offline_tests():
     )
     assert ref == 0 and abs(che_energies[1] - (-1.0)) < 1e-12
     assert che_rows[1]["delta_E_CHE_eV"] == che_energies[1]
+    assert classify_che_comparison(["CO", "CHO"]) == "single_reaction"
+    assert classify_che_comparison(["CO", "CHO", "COH"]) == "branch_comparison"
+    assert classify_che_comparison(["CO", "CHO", "CHOH"]) == "sequential_path"
+    branches = reaction_rows(["CO", "CHO", "COH"], [0.0, -0.4, 0.2], 0, "branch_comparison")
+    assert [row["reaction"] for row in branches] == ["CO* -> CHO*", "CO* -> COH*"]
+    steps = reaction_rows(["CO", "CHO", "CHOH"], [0.0, -0.4, -0.7], 0, "sequential_path")
+    assert abs(steps[0]["reaction_energy_eV"] + 0.4) < 1e-12
+    assert abs(steps[1]["reaction_energy_eV"] + 0.3) < 1e-12
     print(f"PASS: {len(CASES)} dataset parser cases, {len(auto_cases) + len(expanded_cases)} generated-surface parser cases, uploaded-structure planning/site discovery, fcc/bcc/hcp builders, constraints/orientations, and 1 safety rejection")
 
 

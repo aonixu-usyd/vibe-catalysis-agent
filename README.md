@@ -259,6 +259,16 @@ The visualization mode is selected from the accepted results:
 - multiple adsorbates requested together → a step-style adsorption-energy
   profile and one best-structure top view per intermediate.
 
+Reaction charts follow connectivity rather than state count:
+
+- one directed reaction → one numerical reaction-energy card;
+- competing reactions with one common reactant (`CO→CHO` vs `CO→COH`) → a
+  reaction-energy bar chart;
+- at least two consecutive steps (`CO→CHO→CHOH`) → a connected step profile.
+
+The workflow never draws a connector between competing products. Numerical
+directed-step values are saved separately in `che_reaction_energies.csv`.
+
 For hydrogenation intermediates in the CO family, the comparison also computes
 the computational-hydrogen-electrode quantity from relaxed total energies:
 

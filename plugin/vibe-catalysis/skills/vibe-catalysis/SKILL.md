@@ -120,6 +120,9 @@ members of the CO/CHO/COH/CHOH/CH2OH family, run `scripts/visualize_results.py`
 on the completed job directories; it automatically writes `che_energies.csv`,
 a CHE JSON record, and the energy profile. Pass `--potential-v`, `--ph`, and
 `--temperature-k` when the user specifies electrochemical conditions.
+Write both `che_energies.csv` for cumulative state energies and
+`che_reaction_energies.csv` for directed-step energies. Report the inferred
+topology: `single_reaction`, `branch_comparison`, or `sequential_path`.
 
 Report runtime, candidate count, accepted/rejected count, rejection reasons,
 lowest accepted site/orientation, adsorption energy, convergence, and clickable
@@ -129,9 +132,13 @@ For uploaded structures, also report the source filename, SHA-256 provenance,
 whether input constraints were preserved, estimated vacuum, discovered site
 count, active-atom selection, and validation warnings from `summary.json`.
 
-Use the backend's visualization rule: one accepted value becomes a numerical
-energy card; multiple sites become a lowest-energy-per-site bar chart; multiple
-requested adsorbates become a step-style adsorption-energy profile. Include
+Use reaction topology, not merely the number of states, to choose a chart. One
+reaction energy becomes a numerical card. Two or more independent reactions
+sharing a reactant, such as `CO* -> CHO*` versus `CO* -> COH*`, become a
+reaction-energy bar chart. Only a genuinely consecutive path with at least two
+connected steps and three states, such as `CO* -> CHO* -> CHOH*`, becomes a
+step-style profile. Never connect competing products as if one converted into
+the other. Multiple sites remain a lowest-energy-per-site bar chart. Include
 ASE-native relaxed-structure top views with standard element colours, radii,
 and the periodic unit cell. Use the bundled publication theme: Times New Roman,
 Times, or DejaVu Serif fallback; STIX math; 1.8-point axes and major ticks;

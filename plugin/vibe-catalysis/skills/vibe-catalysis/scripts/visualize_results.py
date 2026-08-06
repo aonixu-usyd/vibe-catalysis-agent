@@ -114,6 +114,32 @@ def compute_che_states(labels: list[str], totals: list[float], h2_energy: float,
     return reference_index, energies, rows
 
 
+def classify_che_comparison(labels: list[str]) -> str:
+    """Choose a chart from reaction topology, never merely from state count."""
+    if len(labels) == 2:
+        return "single_reaction"
+    hydrogen_counts = [CHE_H_COUNTS[label] for label in labels]
+    if len(labels) >= 3 and all(
+        hydrogen_counts[i + 1] > hydrogen_counts[i]
+        for i in range(len(hydrogen_counts) - 1)
+    ):
+        return "sequential_path"
+    return "branch_comparison"
+
+
+def reaction_rows(labels: list[str], state_energies: list[float],
+                  reference_index: int, topology: str) -> list[dict]:
+    if topology == "sequential_path":
+        edges = [(i - 1, i) for i in range(1, len(labels))]
+    else:
+        edges = [(reference_index, i) for i in range(len(labels)) if i != reference_index]
+    return [
+        {"reaction": f"{labels[a]}* -> {labels[b]}*", "reactant": f"{labels[a]}*",
+         "product": f"{labels[b]}*", "reaction_energy_eV": state_energies[b] - state_energies[a]}
+        for a, b in edges
+    ]
+
+
 def render_single_job(job_dir: Path, output: Path | None = None) -> Path:
     job = load_job(job_dir)
     summary = job["summary"]
@@ -194,30 +220,61 @@ def render_profile(job_dirs: list[Path], output: Path, potential_v: float = 0.0,
             labels, [row["total_energy"] for row in best], h2_energy,
             potential_v, ph, temperature_k,
         )
+        topology = classify_che_comparison(labels)
+        reactions = reaction_rows(labels, energies, reference_index, topology)
+    else:
+        topology, reactions = "independent_states", []
     fig = plt.figure(figsize=(12.4, 7.0), facecolor="white")
     grid = fig.add_gridspec(2, max(len(jobs), 2), height_ratios=(1.45, 1), hspace=0.42, wspace=0.18)
     fig.subplots_adjust(top=0.84, bottom=0.09)
     ax = fig.add_subplot(grid[0, :])
-    fig.suptitle("CHE hydrogenation-energy profile" if che_mode else "Best adsorption-energy profile", x=0.06, y=0.965, ha="left",
+    che_title = {"single_reaction": "CHE reaction energy",
+                 "branch_comparison": "Competing CHE reaction energies",
+                 "sequential_path": "CHE hydrogenation-energy profile"}.get(topology)
+    fig.suptitle(che_title if che_mode else "Best adsorption-energy comparison", x=0.06, y=0.965, ha="left",
                  fontsize=19, color=INK, weight="bold")
     fig.text(0.06, 0.916, (f"½H₂ reference · U={potential_v:+.2f} V vs SHE · pH {ph:g} · {temperature_k:g} K"
              if che_mode else "Step-style comparison · independent molecular gas references"),
              color=MUTED, fontsize=11)
-    x = np.arange(len(energies), dtype=float)
-    half = 0.32
-    for i, (xi, energy) in enumerate(zip(x, energies)):
-        ax.hlines(energy, xi - half, xi + half, color=BLUE, linewidth=5, zorder=3)
-        ax.text(xi, energy + (0.07 if energy >= 0 else -0.07), f"{energy:+.3f}",
-                ha="center", va="bottom" if energy >= 0 else "top", color=INK,
-                fontsize=11, weight="bold")
-        if i < len(energies) - 1:
-            ax.plot([xi + half, x[i + 1] - half], [energy, energies[i + 1]],
-                    color="#98A2B3", linewidth=1.5, zorder=2)
-    ax.set_xticks(x, labels)
+    if che_mode and topology == "single_reaction":
+        value = reactions[0]["reaction_energy_eV"]
+        ax.axis("off")
+        ax.text(0.04, 0.58, f"{value:+.3f}", transform=ax.transAxes,
+                fontsize=46, color=BLUE, weight="bold", va="center")
+        ax.text(0.31, 0.58, "eV", transform=ax.transAxes,
+                fontsize=19, color=MUTED, va="center")
+        ax.text(0.045, 0.31, reactions[0]["reaction"].replace(" -> ", " → "),
+                transform=ax.transAxes, fontsize=13, color=INK)
+    elif che_mode and topology == "branch_comparison":
+        reaction_values = [row["reaction_energy_eV"] for row in reactions]
+        reaction_labels = [row["reaction"].replace(" -> ", "→") for row in reactions]
+        x = np.arange(len(reactions), dtype=float)
+        bars = ax.bar(x, reaction_values, color=[BLUE] + [TEAL] * (len(x) - 1), width=0.58, zorder=3)
+        for bar, value in zip(bars, reaction_values):
+            ax.annotate(f"{value:+.3f}", (bar.get_x() + bar.get_width() / 2, value),
+                        xytext=(0, 6 if value >= 0 else -7), textcoords="offset points",
+                        ha="center", va="bottom" if value >= 0 else "top", fontsize=11,
+                        color=INK, weight="bold")
+        ax.set_xticks(x, reaction_labels)
+    else:
+        x = np.arange(len(energies), dtype=float)
+        half = 0.32
+        for i, (xi, energy) in enumerate(zip(x, energies)):
+            ax.hlines(energy, xi - half, xi + half, color=BLUE, linewidth=5, zorder=3)
+            ax.text(xi, energy + (0.07 if energy >= 0 else -0.07), f"{energy:+.3f}",
+                    ha="center", va="bottom" if energy >= 0 else "top", color=INK,
+                    fontsize=11, weight="bold")
+            if i < len(energies) - 1:
+                ax.plot([xi + half, x[i + 1] - half], [energy, energies[i + 1]],
+                        color="#98A2B3", linewidth=1.5, zorder=2)
+        ax.set_xticks(x, labels)
     style_energy_axis(ax)
     if che_mode:
-        ax.set_ylabel("Energy relative to reference state, eV", color=INK)
-        ax.set_title("Electronic-energy CHE approximation; ZPE, entropy and solvation are not included", loc="left",
+        ax.set_ylabel("Reaction energy, eV" if topology != "sequential_path" else "Energy relative to initial state, eV", color=INK)
+        ax.set_title(("Bars are independent reactions sharing one reactant" if topology == "branch_comparison"
+                      else "One reaction value" if topology == "single_reaction"
+                      else "Connected levels are consecutive reaction states") +
+                     " · electronic-energy CHE approximation", loc="left",
                      fontsize=12, color=RED, pad=10)
     else:
         ax.set_title("For screening only — this is not a balanced reaction free-energy diagram", loc="left",
@@ -233,7 +290,9 @@ def render_profile(job_dirs: list[Path], output: Path, potential_v: float = 0.0,
     fig.savefig(output, dpi=300, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     metadata = {
-        "visualization_mode": "che_hydrogenation_profile" if che_mode else "adsorption_energy_profile",
+        "visualization_mode": (("che_reaction_energy_card" if topology == "single_reaction" else
+                                "che_reaction_bar_comparison" if topology == "branch_comparison" else
+                                "che_sequential_energy_profile") if che_mode else "adsorption_energy_comparison"),
         "scientific_warning": ("Electronic-energy CHE approximation; ZPE, entropy, solvation and field effects are absent."
                                if che_mode else "Not a balanced reaction or free-energy diagram; each Eads uses its own gas reference."),
         "states": (che_rows if che_mode else
@@ -244,9 +303,14 @@ def render_profile(job_dirs: list[Path], output: Path, potential_v: float = 0.0,
         metadata["che"] = {"reference_state": f"{labels[reference_index]}*", "h2_energy_eV": h2_energy,
                            "potential_V_vs_SHE": potential_v, "pH": ph, "temperature_K": temperature_k,
                            "formula": "DeltaG ~= E(state)-E(reference)-DeltaN_H/2*E(H2)+DeltaN_H*(U+kBT ln(10)*pH)"}
+        metadata["reaction_topology"] = topology
+        metadata["reactions"] = reactions
         with output.with_name("che_energies.csv").open("w", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=list(che_rows[0]))
             writer.writeheader(); writer.writerows(che_rows)
+        with output.with_name("che_reaction_energies.csv").open("w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(reactions[0]))
+            writer.writeheader(); writer.writerows(reactions)
     output.with_suffix(".json").write_text(json.dumps(metadata, indent=2))
     return output
 
