@@ -177,6 +177,9 @@ def main():
     parser.add_argument("--structure", type=Path, help="Uploaded catalyst slab/framework (CIF, POSCAR/CONTCAR, XYZ, EXTXYZ, TRAJ, or another ASE-readable file)")
     parser.add_argument("--active-atom-indices", nargs="+", type=int, help="Zero-based catalyst atom indices defining the candidate active region")
     parser.add_argument("--site-xy", nargs=2, type=float, action="append", metavar=("X", "Y"), help="Explicit Cartesian adsorption coordinate; repeat for multiple sites")
+    parser.add_argument("--potential-v", type=float, default=0.0, help="CHE potential vs SHE")
+    parser.add_argument("--ph", type=float, default=0.0)
+    parser.add_argument("--temperature-k", type=float, default=298.15)
     parser.add_argument("--execute", action="store_true", help="Run after printing the validated plan")
     parser.add_argument("--yes", action="store_true", help="Skip interactive confirmation")
     args = parser.parse_args()
@@ -220,6 +223,8 @@ def main():
                 sys.executable, str(ROOT / "visualize_results.py"),
                 *[str(prediction_root / species) for species in plan["adsorbates"]],
                 "--output", str(prediction_root / "adsorption_energy_profile.png"),
+                "--potential-v", str(args.potential_v), "--ph", str(args.ph),
+                "--temperature-k", str(args.temperature_k),
             ], cwd=ROOT, check=True)
     else:
         subprocess.run(command, cwd=ROOT, check=True)

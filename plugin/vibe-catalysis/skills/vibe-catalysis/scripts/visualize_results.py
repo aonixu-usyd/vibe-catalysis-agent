@@ -24,6 +24,8 @@ TEAL = "#0F9F8F"
 RED = "#DC4C64"
 GRID = "#E4E7EC"
 PAPER = "#F8FAFC"
+CHE_H_COUNTS = {"CO": 0, "CHO": 1, "COH": 1, "CHOH": 2, "CH2OH": 3}
+KB_EV_PER_K = 8.617333262e-5
 
 
 def load_job(path: Path) -> dict:
@@ -35,6 +37,7 @@ def load_job(path: Path) -> dict:
         if row["geometry_status"] != "accepted" or not row["relaxed_adsorption_eV"]:
             continue
         row["energy"] = float(row["relaxed_adsorption_eV"])
+        row["total_energy"] = float(row["relaxed_total_eV"])
         accepted.append(row)
     return {"path": path, "summary": summary, "accepted": accepted}
 
@@ -72,6 +75,25 @@ def style_energy_axis(ax) -> None:
     ax.grid(axis="y", color=GRID, linewidth=0.8, zorder=0)
     ax.axhline(0, color=INK, linewidth=0.9, zorder=1)
     ax.set_ylabel("Adsorption energy, eV", color=INK, fontsize=10)
+
+
+def compute_che_states(labels: list[str], totals: list[float], h2_energy: float,
+                       potential_v: float = 0.0, ph: float = 0.0,
+                       temperature_k: float = 298.15) -> tuple[int, list[float], list[dict]]:
+    """Return CHE energies relative to the least-hydrogenated supplied state."""
+    reference_index = min(range(len(labels)), key=lambda i: CHE_H_COUNTS[labels[i]])
+    reference_h = CHE_H_COUNTS[labels[reference_index]]
+    ph_term = KB_EV_PER_K * temperature_k * np.log(10.0) * ph
+    energies, rows = [], []
+    for label, total in zip(labels, totals):
+        delta_h = CHE_H_COUNTS[label] - reference_h
+        electronic = total - totals[reference_index] - 0.5 * delta_h * h2_energy
+        corrected = electronic + delta_h * (potential_v + ph_term)
+        energies.append(corrected)
+        rows.append({"state": f"{label}*", "hydrogen_count_relative": delta_h,
+                     "relaxed_total_eV": total, "delta_E_CHE_eV": electronic,
+                     "delta_G_CHE_approx_eV": corrected})
+    return reference_index, energies, rows
 
 
 def render_single_job(job_dir: Path, output: Path | None = None) -> Path:
@@ -136,19 +158,32 @@ def render_single_job(job_dir: Path, output: Path | None = None) -> Path:
     return output
 
 
-def render_profile(job_dirs: list[Path], output: Path) -> Path:
+def render_profile(job_dirs: list[Path], output: Path, potential_v: float = 0.0,
+                   ph: float = 0.0, temperature_k: float = 298.15) -> Path:
     jobs = [load_job(path) for path in job_dirs]
     best = [min(job["accepted"], key=lambda row: row["energy"]) for job in jobs]
     summaries = [job["summary"] for job in jobs]
     energies = [row["energy"] for row in best]
     labels = [summary["adsorbate"] for summary in summaries]
+    che_mode = all(label in CHE_H_COUNTS for label in labels) and len(set(labels)) == len(labels)
+    che_rows = []
+    if che_mode:
+        h2_values = [summary.get("che_h2_reference", {}).get("relaxed_eV") for summary in summaries]
+        che_mode = all(value is not None for value in h2_values)
+    if che_mode:
+        h2_energy = float(np.mean(h2_values))
+        reference_index, energies, che_rows = compute_che_states(
+            labels, [row["total_energy"] for row in best], h2_energy,
+            potential_v, ph, temperature_k,
+        )
     fig = plt.figure(figsize=(11.5, 6.5), facecolor="white")
     grid = fig.add_gridspec(2, max(len(jobs), 2), height_ratios=(1.45, 1), hspace=0.42, wspace=0.18)
     fig.subplots_adjust(top=0.84, bottom=0.09)
     ax = fig.add_subplot(grid[0, :])
-    fig.suptitle("Best adsorption-energy profile", x=0.06, y=0.965, ha="left",
+    fig.suptitle("CHE hydrogenation-energy profile" if che_mode else "Best adsorption-energy profile", x=0.06, y=0.965, ha="left",
                  fontsize=17, color=INK, weight="bold")
-    fig.text(0.06, 0.916, "Step-style comparison · independent molecular gas references",
+    fig.text(0.06, 0.916, (f"½H₂ reference · U={potential_v:+.2f} V vs SHE · pH {ph:g} · {temperature_k:g} K"
+             if che_mode else "Step-style comparison · independent molecular gas references"),
              color=MUTED, fontsize=9.5)
     x = np.arange(len(energies), dtype=float)
     half = 0.32
@@ -162,23 +197,39 @@ def render_profile(job_dirs: list[Path], output: Path) -> Path:
                     color="#98A2B3", linewidth=1.5, zorder=2)
     ax.set_xticks(x, labels)
     style_energy_axis(ax)
-    ax.set_title("For screening only — this is not a balanced reaction free-energy diagram", loc="left",
-                 fontsize=10.5, color=RED, pad=10)
+    if che_mode:
+        ax.set_ylabel("Energy relative to reference state, eV", color=INK, fontsize=10)
+        ax.set_title("Electronic-energy CHE approximation; ZPE, entropy and solvation are not included", loc="left",
+                     fontsize=10.5, color=RED, pad=10)
+    else:
+        ax.set_title("For screening only — this is not a balanced reaction free-energy diagram", loc="left",
+                     fontsize=10.5, color=RED, pad=10)
     for i, (job, row) in enumerate(zip(jobs, best)):
         top = fig.add_subplot(grid[1, i])
         draw_top_view(top, structure_for(job, row), f"{labels[i]} · {row['site']}")
     for i in range(len(jobs), max(len(jobs), 2)):
         fig.add_subplot(grid[1, i]).axis("off")
-    fig.text(0.06, 0.025, "Eads values use a different gas-phase molecular reference for each intermediate.",
+    fig.text(0.06, 0.025, ("ΔE(CO*→CHO*) = E(CHO*) − E(CO*) − ½E(H₂); potential/pH corrections use the CHE convention."
+             if che_mode else "Eads values use a different gas-phase molecular reference for each intermediate."),
              fontsize=8.5, color=MUTED)
     fig.savefig(output, dpi=220, bbox_inches="tight", facecolor="white")
     plt.close(fig)
-    output.with_suffix(".json").write_text(json.dumps({
-        "visualization_mode": "adsorption_energy_profile",
-        "scientific_warning": "Not a balanced reaction or free-energy diagram; each Eads uses its own gas reference.",
-        "states": [{"adsorbate": label, "energy_eV": energy, "job": str(job["path"])}
-                   for label, energy, job in zip(labels, energies, jobs)],
-    }, indent=2))
+    metadata = {
+        "visualization_mode": "che_hydrogenation_profile" if che_mode else "adsorption_energy_profile",
+        "scientific_warning": ("Electronic-energy CHE approximation; ZPE, entropy, solvation and field effects are absent."
+                               if che_mode else "Not a balanced reaction or free-energy diagram; each Eads uses its own gas reference."),
+        "states": (che_rows if che_mode else
+                   [{"adsorbate": label, "energy_eV": energy, "job": str(job["path"])}
+                    for label, energy, job in zip(labels, energies, jobs)]),
+    }
+    if che_mode:
+        metadata["che"] = {"reference_state": f"{labels[reference_index]}*", "h2_energy_eV": h2_energy,
+                           "potential_V_vs_SHE": potential_v, "pH": ph, "temperature_K": temperature_k,
+                           "formula": "DeltaG ~= E(state)-E(reference)-DeltaN_H/2*E(H2)+DeltaN_H*(U+kBT ln(10)*pH)"}
+        with output.with_name("che_energies.csv").open("w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(che_rows[0]))
+            writer.writeheader(); writer.writerows(che_rows)
+    output.with_suffix(".json").write_text(json.dumps(metadata, indent=2))
     return output
 
 
@@ -186,12 +237,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Plot UMA adsorption energies with top-view structures")
     parser.add_argument("jobs", nargs="+", type=Path, help="One or more completed prediction directories")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--potential-v", type=float, default=0.0, help="Electrode potential vs SHE for CHE correction")
+    parser.add_argument("--ph", type=float, default=0.0)
+    parser.add_argument("--temperature-k", type=float, default=298.15)
     args = parser.parse_args()
     if len(args.jobs) == 1:
         print(render_single_job(args.jobs[0], args.output))
     else:
         output = args.output or args.jobs[0].parent / "adsorption_energy_profile.png"
-        print(render_profile(args.jobs, output))
+        print(render_profile(args.jobs, output, args.potential_v, args.ph, args.temperature_k))
 
 
 if __name__ == "__main__":

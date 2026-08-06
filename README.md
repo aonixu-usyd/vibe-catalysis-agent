@@ -259,6 +259,20 @@ The visualization mode is selected from the accepted results:
 - multiple adsorbates requested together → a step-style adsorption-energy
   profile and one best-structure top view per intermediate.
 
+For hydrogenation intermediates in the CO family, the comparison also computes
+the computational-hydrogen-electrode quantity from relaxed total energies:
+
+```text
+ΔE_CHE(CO* → CHO*) = E(CHO*) − E(CO*) − ½E(H₂)
+ΔG_CHE,approx(U,pH) = ΔE_CHE + eU + kBT ln(10) pH
+```
+
+The workflow writes the numerical values to `che_energies.csv` and the profile
+JSON. Defaults are 0 V vs SHE, pH 0, and 298.15 K; use `--potential-v`, `--ph`,
+and `--temperature-k` to change them. This is an electronic-energy CHE
+approximation, not a complete free energy: ZPE, entropy, solvation, electric
+field, and other corrections are not included unless supplied separately.
+
 For example, this runs both intermediates and creates
 `adsorption_energy_profile.png`:
 

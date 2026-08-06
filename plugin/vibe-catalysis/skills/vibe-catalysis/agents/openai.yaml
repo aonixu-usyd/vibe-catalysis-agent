@@ -1,4 +1,4 @@
 interface:
   display_name: "Vibe Catalysis"
-  short_description: "Run ASE + UMA adsorption on surfaces and frameworks"
-  default_prompt: "Use $vibe-catalysis to add CO to my uploaded catalyst or framework, preserving all existing atoms as catalyst atoms, then calculate and plot adsorption with local ASE and UMA."
+  short_description: "Run ASE + UMA adsorption and CHE reaction energies"
+  default_prompt: "Use $vibe-catalysis to calculate CO* to CHO* on my catalyst with local ASE and UMA, include the H2-referenced CHE energy, numerical table, energy profile, and top views."

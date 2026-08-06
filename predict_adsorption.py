@@ -110,6 +110,14 @@ def gas_reference(species: str) -> Atoms:
     return atoms
 
 
+def hydrogen_reference() -> Atoms:
+    """Gas-phase H2 reference for computational-hydrogen-electrode energies."""
+    atoms = Atoms("H2", positions=[(0.0, 0.0, 0.0), (0.0, 0.0, 0.74)])
+    atoms.center(vacuum=6.0)
+    atoms.pbc = False
+    return atoms
+
+
 def layer_indices(atoms: Atoms, tolerance: float = 0.25) -> list[list[int]]:
     order = np.argsort(atoms.positions[:, 2])
     layers: list[list[int]] = []
@@ -517,6 +525,19 @@ def main() -> None:
     write(output / "gas_initial.extxyz", gas_initial)
     write(output / "gas_relaxed.extxyz", gas)
 
+    h2 = hydrogen_reference()
+    h2_initial = h2.copy()
+    attach(calc, h2)
+    h2_sp = float(h2.get_potential_energy())
+    if args.single_point_only:
+        h2_relaxed, h2_steps, h2_converged = h2_sp, 0, True
+    else:
+        h2_relaxed, h2_steps, h2_converged = relax(
+            h2, output / "h2_che_reference", args.fmax, args.max_steps
+        )
+    write(output / "h2_che_initial.extxyz", h2_initial)
+    write(output / "h2_che_relaxed.extxyz", h2)
+
     rows: list[CandidateResult] = []
     for site in sites:
         for anchor in anchors:
@@ -562,6 +583,8 @@ def main() -> None:
         "fixed_layers": args.fixed_layers, "fixed_atom_indices": fixed,
         "clean_slab": {"single_point_eV": slab_sp, "relaxed_eV": slab_relaxed, "steps": slab_steps, "converged": slab_converged},
         "gas_reference": {"isomer": args.adsorbate, "single_point_eV": gas_sp, "relaxed_eV": gas_relaxed, "steps": gas_steps, "converged": gas_converged},
+        "che_h2_reference": {"formula": "H2", "single_point_eV": h2_sp, "relaxed_eV": h2_relaxed, "steps": h2_steps, "converged": h2_converged,
+                             "definition": "mu(H+ + e-) = 1/2 E(H2) - eU at the electronic-energy level"},
         "best_candidate": asdict(best) if best else None,
         "scientific_label": ("UMA prediction on a user-supplied catalyst structure; not a Catalysis-Hub DFT benchmark"
                              if args.structure else

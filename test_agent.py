@@ -12,8 +12,9 @@ from ase import Atoms
 from vibe_agent import parse_prompt
 from predict_adsorption import (
     build_candidate, build_slab, discover_custom_sites, gas_reference,
-    molecule_template,
+    hydrogen_reference, molecule_template,
 )
+from visualize_results import compute_che_states
 
 
 ROOT = Path(__file__).resolve().parent
@@ -107,6 +108,12 @@ def offline_tests():
     assert len(candidate) == 18 and len(ads_indices) == 2
     assert set(candidate.get_tags()[ads_indices]) == {2}
     assert gas_reference("CH2OH").pbc.tolist() == [False, False, False]
+    assert hydrogen_reference().get_chemical_formula() == "H2"
+    ref, che_energies, che_rows = compute_che_states(
+        ["CO", "CHO"], [-100.0, -104.0], -6.0
+    )
+    assert ref == 0 and abs(che_energies[1] - (-1.0)) < 1e-12
+    assert che_rows[1]["delta_E_CHE_eV"] == che_energies[1]
     print(f"PASS: {len(CASES)} dataset parser cases, {len(auto_cases) + len(expanded_cases)} generated-surface parser cases, uploaded-structure planning/site discovery, fcc/bcc/hcp builders, constraints/orientations, and 1 safety rejection")
 
 

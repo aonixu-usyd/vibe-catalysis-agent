@@ -60,7 +60,7 @@ the user explicitly supplies atom membership or paired-state inputs.
 1. Build a supported elemental slab, or read the user-supplied catalyst/framework structure without changing the source or reclassifying its atoms.
 2. Validate its 3D cell, in-plane periodicity, and approximate vacuum; for generated structures, add vacuum and surface-plane periodicity.
 3. Preserve constraints read by ASE; if none exist, apply `FixAtoms` to the bottom two layers. Replace uploaded constraints only when the user explicitly asks.
-4. Build and independently relax the gas-phase molecular/isomer reference.
+4. Build and independently relax the gas-phase molecular/isomer reference and H₂ for CHE hydrogenation energies.
 5. For generated slabs, enumerate ASE's named sites for that exact surface. For uploaded slabs, discover indexed ontop, bridge, and threefold-hollow coordinates from top-layer atoms. For COFs, MOFs, porous/multicomponent materials, defects, and supported catalysts, prefer user-selected zero-based `--active-atom-indices` or explicit `--site-xy X Y` coordinates over blind top-layer discovery.
 6. Enumerate C-down/O-down for CO; enumerate 0/120/240° azimuths for larger intermediates.
 7. Calculate UMA single-point energies with the `oc20` task.
@@ -106,6 +106,21 @@ Use the backend definition:
 E_ads(X) = E_UMA(slab + X) - E_UMA(clean slab) - E_UMA(X gas)
 ```
 
+For proton-electron hydrogenation such as `CO* + H+ + e- -> CHO*`, do not
+subtract independently referenced adsorption energies. Use the best relaxed
+total energies from the same slab model and the bundled relaxed H₂ reference:
+
+```text
+DeltaE_CHE(CO* -> CHO*) = E(CHO*) - E(CO*) - 1/2 E(H2)
+DeltaG_CHE_approx(U,pH) = DeltaE_CHE + eU + kB*T*ln(10)*pH
+```
+
+Potential defaults to `U=0 V vs SHE`, `pH=0`, and `T=298.15 K`. For multiple
+members of the CO/CHO/COH/CHOH/CH2OH family, run `scripts/visualize_results.py`
+on the completed job directories; it automatically writes `che_energies.csv`,
+a CHE JSON record, and the energy profile. Pass `--potential-v`, `--ph`, and
+`--temperature-k` when the user specifies electrochemical conditions.
+
 Report runtime, candidate count, accepted/rejected count, rejection reasons,
 lowest accepted site/orientation, adsorption energy, convergence, and clickable
 links to `summary.json`, `candidates.csv`, `best_structure.extxyz`, and
@@ -120,8 +135,9 @@ requested adsorbates become a step-style adsorption-energy profile. Include
 ASE-native relaxed-structure top views with standard element colours, radii,
 and the periodic unit cell. Label a multi-adsorbate profile as independently
 referenced adsorption energies, not a balanced reaction or free-energy diagram.
-A strict reaction diagram requires consistent chemical potentials and
-thermodynamic corrections.
+A CHE electronic-energy diagram uses a consistent H₂ chemical potential, but
+is not a full free-energy diagram unless ZPE, entropy, solvation, field and
+other requested corrections are supplied.
 
 Always label the result:
 

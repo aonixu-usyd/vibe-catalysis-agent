@@ -1,6 +1,6 @@
 {
   "name": "vibe-catalysis",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Build, import, relax, compare, and visualize heterogeneous-catalysis adsorption structures with ASE and FAIR-Chem UMA.",
   "author": {
     "name": "Aoni Xu",
@@ -13,7 +13,7 @@
   "interface": {
     "displayName": "Vibe Catalysis",
     "shortDescription": "Run ASE + UMA adsorption workflows from natural language.",
-    "longDescription": "Generate elemental surfaces or import user-supplied catalyst structures including COFs, MOFs, oxides, and supported catalysts. Existing C/O/N/H remain framework atoms; selected active atoms or coordinates define adsorption sites for UMA calculation and visualization.",
+    "longDescription": "Generate or import catalyst structures, run ASE + UMA adsorption calculations, and compare CO-family hydrogenation with an explicit H2-referenced computational hydrogen electrode energy profile.",
     "developerName": "Aoni Xu",
     "category": "Developer Tools",
     "capabilities": ["Local computation", "Scientific visualization"],
@@ -24,6 +24,7 @@
       "Use active atoms 18, 24, and 31 in my uploaded COF CIF to screen CO adsorption sites.",
       "Relax CHO on Fe(110) with the bottom layers fixed.",
       "Compare CO and CHO adsorption and draw an energy profile."
+      ,"Calculate the CHE reaction energy from CO* to CHO* at 0 V vs SHE."
     ],
     "brandColor": "#2563EB",
     "composerIcon": "./assets/logo.png",
