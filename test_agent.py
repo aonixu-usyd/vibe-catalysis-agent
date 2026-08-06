@@ -34,7 +34,13 @@ def offline_tests():
         pass
     else:
         raise AssertionError("Unsupported Cu(100) request was not rejected")
-    print(f"PASS: {len(CASES)} multilingual parser cases and 1 safety rejection")
+    try:
+        parse_prompt("计算CO在Cu111上的吸附能")
+    except ValueError as error:
+        assert "CO" in str(error)
+    else:
+        raise AssertionError("Unsupported CO request was not rejected")
+    print(f"PASS: {len(CASES)} multilingual parser cases and 2 safety rejections")
 
 
 def integration_test():

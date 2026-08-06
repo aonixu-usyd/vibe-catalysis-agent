@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 SUPPORTED_METALS = ("Cu", "Ag", "Au", "Pt", "Pd")
 SUPPORTED_ADSORBATES = ("H", "O", "OH", "C", "CH", "CH2", "CH3")
+UNSUPPORTED_COH_SPECIES = ("CO2", "CHO", "COH", "CO")
 
 METAL_ALIASES = {
     "Cu": ("cu", "copper", "铜", "銅", "cobre", "cuivre", "kupfer", "銅"),
@@ -47,7 +48,19 @@ def contains_alias(text: str, alias: str) -> bool:
 
 def parse_prompt(prompt: str) -> dict:
     text = prompt.lower().replace("（", "(").replace("）", ")")
-    metals = [symbol for symbol, aliases in METAL_ALIASES.items() if any(contains_alias(text, a) for a in aliases)]
+    requested_unsupported = [species for species in UNSUPPORTED_COH_SPECIES if contains_alias(text, species.lower())]
+    if requested_unsupported:
+        species = ", ".join(requested_unsupported)
+        raise ValueError(
+            f"Unsupported adsorbate in the packaged MamunHighT2019 subset: {species}. "
+            "Available adsorbates are H, O, OH, C, CH, CH2, and CH3. "
+            "No calculation was started."
+        )
+    metals = [
+        symbol for symbol, aliases in METAL_ALIASES.items()
+        if any(contains_alias(text, a) for a in aliases)
+        or re.search(rf"(?<![a-z]){symbol.lower()}(?=(?:\d|[^a-z0-9]|$))", text)
+    ]
     adsorbates = []
     masked = text
     for species in ("CH3", "CH2", "OH", "CH"):
@@ -84,7 +97,11 @@ def main():
     parser.add_argument("--yes", action="store_true", help="Skip interactive confirmation")
     args = parser.parse_args()
     prompt = " ".join(args.prompt)
-    plan = parse_prompt(prompt)
+    try:
+        plan = parse_prompt(prompt)
+    except ValueError as error:
+        print(f"REQUEST REJECTED: {error}", file=sys.stderr)
+        raise SystemExit(2)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     job_name = f"nl_job_{stamp}"
     payload = {"schema_version": 1, "original_prompt": prompt, "parser": "local_multilingual_rules_v1", **plan}
