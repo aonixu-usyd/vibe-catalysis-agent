@@ -396,6 +396,14 @@ def main() -> None:
     if best:
         source = structures / f"{best.candidate}_final.extxyz"
         (output / "best_structure.extxyz").write_bytes(source.read_bytes())
+        try:
+            from visualize_results import render_single_job
+            image_path = render_single_job(output)
+            summary["visualization"] = str(image_path)
+            (output / "summary.json").write_text(json.dumps(summary, indent=2))
+        except Exception as exc:
+            summary["visualization_error"] = f"{type(exc).__name__}: {exc}"
+            (output / "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))
     print(f"Results: {output}")
 

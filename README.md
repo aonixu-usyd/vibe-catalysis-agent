@@ -38,6 +38,7 @@ It has two deliberately separated modes:
   incompatible surface.
 - CO C-down/O-down enumeration; three azimuths for larger C/O/H intermediates.
 - Bottom-layer constraints, geometry checks, candidate table, and best structure.
+- Automatic publication-style energy graphics with relaxed-structure top views.
 
 ## Requirements
 
@@ -174,7 +175,39 @@ Outputs are written to a new results directory:
 - `summary.json`: references, accepted count, and lowest-energy candidate;
 - `structures/*_initial.extxyz` and `*_final.extxyz`;
 - `best_structure.extxyz`;
+- `energy_and_topviews.png`: a single-energy card or site-comparison bar chart,
+  plus top views of the selected relaxed structures;
+- `visualization.json`: plotted values, structures, and visualization mode;
 - ASE optimizer trajectories and logs.
+
+The visualization mode is selected from the accepted results:
+
+- one accepted energy → a clean numerical energy card;
+- two or more adsorption sites → a bar chart using the lowest accepted
+  orientation at each site;
+- multiple adsorbates requested together → a step-style adsorption-energy
+  profile and one best-structure top view per intermediate.
+
+For example, this runs both intermediates and creates
+`adsorption_energy_profile.png`:
+
+```bash
+python vibe_agent.py "计算CO和CHO在Cu(111)上的吸附能" --execute --yes
+```
+
+Completed prediction directories can be visualized again without rerunning UMA:
+
+```bash
+python visualize_results.py results/job/CO
+python visualize_results.py results/job/CO results/job/CHO \
+  --output results/job/adsorption_energy_profile.png
+```
+
+The multi-intermediate step plot compares independently referenced adsorption
+energies. It is explicitly labelled as a screening profile, not a balanced
+reaction-energy or free-energy diagram. A strict CO→CHO diagram needs a
+consistent hydrogen chemical potential and any desired zero-point,
+temperature, entropy, solvent, and electrode-potential corrections.
 
 For CO, the default search is 4 sites × C-down/O-down = 8 candidates. For
 CHO, COH, CHOH, and CH2OH, C anchoring and 0/120/240° azimuths are enumerated.

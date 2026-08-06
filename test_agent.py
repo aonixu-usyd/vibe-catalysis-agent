@@ -47,6 +47,8 @@ def offline_tests():
         assert plan["mode"] == "ase_automatic_prediction"
         assert plan["metals"] == [metal]
         assert plan["adsorbates"] == [adsorbate]
+    multi_plan = parse_prompt("计算CO和CHO在Cu(111)上的吸附能")
+    assert multi_plan["adsorbates"] == ["CO", "CHO"]
     expanded_cases = [
         ("计算CO在Ni(100)上的吸附能", "Ni", "fcc", "100"),
         ("Calculate CO adsorption on Fe(110)", "Fe", "bcc", "110"),

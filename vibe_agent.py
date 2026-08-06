@@ -151,7 +151,7 @@ def parse_prompt(prompt: str) -> dict:
         "orientation_enumeration": ("CO: C-down and O-down; larger intermediates: 0/120/240 degree azimuths" if prediction_species else None),
         "scientific_label": ("UMA prediction on ASE-generated structures; no DFT reference" if prediction_species
                              else "Catalysis-Hub DFT benchmark"),
-        "outputs": (["plan", "candidate_csv", "summary_json", "initial_and_final_structures", "best_structure"]
+        "outputs": (["plan", "candidate_csv", "summary_json", "energy_visualization", "top_views", "initial_and_final_structures", "best_structure"]
                     if prediction_species else ["json", "csv", "metrics", "parity_plot"]),
     }
 
@@ -178,15 +178,26 @@ def main():
     if not args.execute: return
     if not args.yes and input("Run this plan? [y/N] ").strip().lower() not in {"y", "yes", "是"}: return
     if plan["mode"] == "ase_automatic_prediction":
-        command = [
+        prediction_root = ROOT / "results" / job_name
+        commands = [[
             sys.executable, str(ROOT / "predict_adsorption.py"),
             "--metal", plan["metals"][0], "--facet", plan["facet"],
-            "--adsorbate", plan["adsorbates"][0],
-            "--output", str(ROOT / "results" / job_name),
-        ]
+            "--adsorbate", adsorbate,
+            "--output", str(prediction_root / adsorbate),
+        ] for adsorbate in plan["adsorbates"]]
     else:
         command = [sys.executable, str(ROOT / "run_catbench_subset.py"), "--source", str(ROOT / "raw_data/Mamun_noble_C1_subset_adsorption.json"), "--benchmark-name", job_name, "--mlip-name", f"UMA-{job_name}", "--metals", *plan["metals"], "--adsorbates", *plan["adsorbates"]]
-    subprocess.run(command, cwd=ROOT, check=True)
+    if plan["mode"] == "ase_automatic_prediction":
+        for command in commands:
+            subprocess.run(command, cwd=ROOT, check=True)
+        if len(commands) > 1:
+            subprocess.run([
+                sys.executable, str(ROOT / "visualize_results.py"),
+                *[str(prediction_root / species) for species in plan["adsorbates"]],
+                "--output", str(prediction_root / "adsorption_energy_profile.png"),
+            ], cwd=ROOT, check=True)
+    else:
+        subprocess.run(command, cwd=ROOT, check=True)
     if plan["mode"] == "ase_automatic_prediction":
         print(f"\nCalculation complete. Automatic prediction result: {ROOT / 'results' / job_name}")
     else:
