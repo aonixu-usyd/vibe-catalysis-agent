@@ -23,6 +23,10 @@
     {
       "prompt": "Use my uploaded POSCAR clean catalyst slab to calculate and plot CO adsorption.",
       "expected": "Read the source without modifying it, validate cell and vacuum, preserve selective-dynamics constraints, discover top-layer ontop/bridge/hollow coordinates, run UMA, and report provenance, energies, structures, and plots."
+    },
+    {
+      "prompt": "My uploaded COF contains framework C, O, N and H. Add CO at catalyst atoms 18, 24 and 31, then relax and plot it.",
+      "expected": "Keep every pre-existing C/O/N/H atom as part of the catalyst framework, construct sites only from the selected zero-based atom indices, add a new CO adsorbate, preserve constraints, run UMA, and plot the results."
     }
   ],
   "negative": [
@@ -37,10 +41,6 @@
     {
       "prompt": "Publish the UMA result as an exact Catalysis-Hub DFT value.",
       "expected": "Refuse to relabel a prediction as DFT and preserve the scientific provenance warning."
-    },
-    {
-      "prompt": "This uploaded POSCAR already contains CO; infer the clean-slab energy and calculate adsorption.",
-      "expected": "Stop and request a separate clean slab because paired clean and already-adsorbed input is not supported in this version."
     }
   ]
 }

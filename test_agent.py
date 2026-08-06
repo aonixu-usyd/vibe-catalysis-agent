@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from ase import Atoms
+
 from vibe_agent import parse_prompt
 from predict_adsorption import (
     build_candidate, build_slab, discover_custom_sites, gas_reference,
@@ -78,6 +80,21 @@ def offline_tests():
     assert any(name.startswith("ontop_") for name in custom_sites)
     assert any(name.startswith("bridge_") for name in custom_sites)
     assert any(name.startswith("hollow_") for name in custom_sites)
+    framework_sites = discover_custom_sites(slab, ("ontop",), 0.6, 6, [0, 3])
+    assert len(framework_sites) == 2
+    cof = Atoms(
+        "CONH", positions=[(1, 1, 3), (3, 1, 3), (1, 3, 4), (3, 3, 5)],
+        cell=[6, 6, 14], pbc=[True, True, False],
+    )
+    cof_sites = discover_custom_sites(cof, ("ontop", "bridge"), 0.6, 6, [0, 1])
+    assert len([name for name in cof_sites if name.startswith("ontop_")]) == 2
+    assert any(name.startswith("bridge_") for name in cof_sites)
+    try:
+        discover_custom_sites(slab, ("ontop",), 0.6, 6, [len(slab)])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Out-of-range active atom index was not rejected")
     fe, fe_fixed, fe_metadata, fe_sites = build_slab("Fe", "110", (2, 2, 4), 8.0, 2)
     assert fe_metadata["crystal_structure"] == "bcc" and "hollow" in fe_sites and fe_fixed
     co_slab, co_fixed, co_metadata, co_sites = build_slab("Co", "0001", (2, 2, 4), 8.0, 2)

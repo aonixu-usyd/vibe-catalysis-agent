@@ -177,8 +177,11 @@ python predict_adsorption.py \
 ```
 
 Supported input includes CIF, POSCAR/CONTCAR, XYZ, EXTXYZ, TRAJ, and other
-formats readable by ASE. The input must be a **clean slab**, not a structure
-that already contains the adsorbate. The source file is read-only: every
+formats readable by ASE. Every atom already present in the uploaded file is
+treated as part of the **catalyst/framework**, regardless of element. Thus C,
+O, N, and H in COFs, MOFs, oxides, nitrides, hydroxylated surfaces, or supported
+catalysts are never inferred to be adsorbates. The adsorbate is only the new
+species explicitly named in the request. The source file is read-only: every
 generated candidate and relaxed result is written to the result directory.
 
 For an uploaded structure, the workflow:
@@ -197,10 +200,28 @@ one or more `--site-xy X Y` options. Add `--replace-constraints` only when you
 intentionally want to discard constraints read from the source and regenerate
 bottom-layer constraints.
 
+For a COF/MOF, porous framework, oxide, defect, or supported catalyst, define
+the chemically relevant region explicitly when possible. Atom indices are
+zero-based:
+
+```bash
+python vibe_agent.py \
+  "在上传的 COF 模型活性位点计算 CO 吸附" \
+  --structure /path/to/cof.cif \
+  --active-atom-indices 18 24 31 --execute --yes
+```
+
+This generates candidate sites from those framework atoms only. Alternatively,
+use repeated `--site-xy X Y` coordinates for experimentally or chemically
+identified sites.
+
 Automatic coordinate discovery is a screening heuristic, especially for
 reconstructed, stepped, porous, or multicomponent surfaces. Review the ASE top
 views and candidate table before interpreting the energies. Paired
-clean+already-adsorbed input is not yet supported.
+An uploaded structure that intentionally contains a pre-adsorbed species is
+still treated as one combined catalyst substrate unless paired-state analysis
+is explicitly requested; automatic decomposition into “slab” and “old
+adsorbate” is deliberately not attempted.
 
 If `--sites` is omitted, every named ASE site available for that surface is
 used. Examples include:

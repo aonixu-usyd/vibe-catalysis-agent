@@ -246,13 +246,20 @@ def discover_custom_sites(
     site_types: list[str],
     top_tolerance: float = 0.6,
     max_per_type: int = 6,
+    active_atom_indices: list[int] | None = None,
 ) -> dict[str, tuple[float, float]]:
-    """Find representative ontop/bridge/hollow coordinates on an uploaded slab."""
+    """Find sites from geometry; every input atom remains part of the catalyst."""
     if max_per_type < 1:
         raise ValueError("max_sites_per_type must be positive")
     fractional, cell_xy = _fractional_xy(slab)
-    top_z = float(slab.positions[:, 2].max())
-    top = [int(i) for i, z in enumerate(slab.positions[:, 2]) if z >= top_z - top_tolerance]
+    if active_atom_indices:
+        invalid = sorted({i for i in active_atom_indices if i < 0 or i >= len(slab)})
+        if invalid:
+            raise ValueError(f"Active atom indices out of range for {len(slab)} atoms: {invalid}")
+        top = list(dict.fromkeys(active_atom_indices))
+    else:
+        top_z = float(slab.positions[:, 2].max())
+        top = [int(i) for i, z in enumerate(slab.positions[:, 2]) if z >= top_z - top_tolerance]
     if not top:
         raise ValueError("No top-layer atoms detected in uploaded slab")
 
@@ -308,6 +315,7 @@ def load_custom_slab(
     site_types: list[str],
     top_tolerance: float,
     max_sites_per_type: int,
+    active_atom_indices: list[int] | None = None,
 ) -> tuple[Atoms, list[int], dict, dict[str, tuple[float, float]]]:
     path = path.expanduser().resolve()
     if not path.is_file():
@@ -318,7 +326,9 @@ def load_custom_slab(
     slab.pbc = (True, True, False)
     had_input_constraints = bool(slab.constraints)
     fixed = apply_bottom_constraints(slab, fixed_layers, preserve_constraints)
-    sites = discover_custom_sites(slab, site_types, top_tolerance, max_sites_per_type)
+    sites = discover_custom_sites(
+        slab, site_types, top_tolerance, max_sites_per_type, active_atom_indices
+    )
     z_span = float(np.ptp(slab.positions[:, 2]))
     vacuum_estimate = float(slab.cell.lengths()[2] - z_span)
     warnings = []
@@ -334,6 +344,8 @@ def load_custom_slab(
         "facet": "custom",
         "size": None,
         "n_atoms": len(slab),
+        "catalyst_atom_policy": "all atoms in the uploaded structure are catalyst atoms",
+        "active_atom_indices_zero_based": active_atom_indices,
         "preserved_input_constraints": bool(preserve_constraints and had_input_constraints),
         "estimated_vacuum_A": vacuum_estimate,
         "warnings": warnings,
@@ -406,7 +418,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="ASE automatic adsorption modelling with FAIR-Chem UMA")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--metal", help="Element symbol with an ASE fcc/bcc/hcp reference state")
-    source.add_argument("--structure", type=Path, help="Uploaded clean slab: CIF, POSCAR/CONTCAR, XYZ/EXTXYZ, TRAJ, or another ASE-readable file")
+    source.add_argument("--structure", type=Path, help="Uploaded catalyst slab/framework: CIF, POSCAR/CONTCAR, XYZ/EXTXYZ, TRAJ, or another ASE-readable file")
     parser.add_argument("--facet", help="111/100/110 for cubic; 0001/10-10 for hcp")
     parser.add_argument("--crystal-structure", choices=CRYSTAL_STRUCTURES)
     parser.add_argument("--lattice-a", type=float)
@@ -415,6 +427,7 @@ def main() -> None:
     parser.add_argument("--sites", nargs="+", help="ASE site names; default is every site available for the surface")
     parser.add_argument("--site-types", nargs="+", choices=("ontop", "bridge", "hollow"), default=["ontop", "bridge", "hollow"], help="Site types discovered on an uploaded slab")
     parser.add_argument("--site-xy", nargs=2, type=float, action="append", metavar=("X", "Y"), help="Explicit Cartesian adsorption coordinate; repeat for multiple sites")
+    parser.add_argument("--active-atom-indices", nargs="+", type=int, help="Zero-based catalyst atom indices used to construct ontop/bridge/hollow sites; useful for COF/MOF/oxide surfaces")
     parser.add_argument("--top-layer-tolerance", type=float, default=0.6)
     parser.add_argument("--max-sites-per-type", type=int, default=6)
     parser.add_argument("--anchors", nargs="+", choices=("C", "O"))
@@ -448,6 +461,7 @@ def main() -> None:
         slab, fixed, surface_metadata, custom_sites = load_custom_slab(
             args.structure, args.fixed_layers, not args.replace_constraints,
             args.site_types, args.top_layer_tolerance, args.max_sites_per_type,
+            args.active_atom_indices,
         )
         if args.site_xy:
             custom_sites = {f"custom_{i:02d}": tuple(xy) for i, xy in enumerate(args.site_xy, start=1)}
@@ -549,7 +563,7 @@ def main() -> None:
         "clean_slab": {"single_point_eV": slab_sp, "relaxed_eV": slab_relaxed, "steps": slab_steps, "converged": slab_converged},
         "gas_reference": {"isomer": args.adsorbate, "single_point_eV": gas_sp, "relaxed_eV": gas_relaxed, "steps": gas_steps, "converged": gas_converged},
         "best_candidate": asdict(best) if best else None,
-        "scientific_label": ("UMA prediction on a user-supplied clean slab; not a Catalysis-Hub DFT benchmark"
+        "scientific_label": ("UMA prediction on a user-supplied catalyst structure; not a Catalysis-Hub DFT benchmark"
                              if args.structure else
                              "UMA prediction on ASE-generated candidates; not a Catalysis-Hub DFT benchmark"),
     }

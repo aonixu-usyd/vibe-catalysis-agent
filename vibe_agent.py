@@ -110,7 +110,7 @@ def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
         metals = list(DATASET_METALS)
     if not adsorbates:
         if uploaded_structure:
-            raise ValueError("Name one supported adsorbate for the uploaded clean slab: CO, CHO/HCO, COH, CHOH, or CH2OH.")
+            raise ValueError("Name the adsorbate to add to the uploaded catalyst: CO, CHO/HCO, COH, CHOH, or CH2OH. C/O/N/H already present in the file remain catalyst atoms.")
         adsorbates = ["C", "CH", "CH2", "CH3"]
     metals = [x for x in PREDICTION_METALS if x in metals]
     adsorbates = [x for x in SUPPORTED_ADSORBATES if x in set(adsorbates)]
@@ -163,7 +163,7 @@ def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
         "site_enumeration": ("automatic ontop/bridge/hollow coordinate discovery on the uploaded top layer" if uploaded_structure
                              else "all ASE named high-symmetry sites available for the selected surface" if prediction_species else None),
         "orientation_enumeration": ("CO: C-down and O-down; larger intermediates: 0/120/240 degree azimuths" if prediction_species else None),
-        "scientific_label": ("UMA prediction on a user-supplied clean slab; no DFT reference" if uploaded_structure
+        "scientific_label": ("UMA prediction on a user-supplied catalyst structure; no DFT reference" if uploaded_structure
                              else "UMA prediction on ASE-generated structures; no DFT reference" if prediction_species
                              else "Catalysis-Hub DFT benchmark"),
         "outputs": (["plan", "candidate_csv", "summary_json", "energy_visualization", "top_views", "initial_and_final_structures", "best_structure"]
@@ -174,7 +174,9 @@ def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Multilingual natural-language UMA/CatHub agent")
     parser.add_argument("prompt", nargs="+", help="Natural-language calculation request")
-    parser.add_argument("--structure", type=Path, help="Uploaded clean slab (CIF, POSCAR/CONTCAR, XYZ, EXTXYZ, TRAJ, or another ASE-readable file)")
+    parser.add_argument("--structure", type=Path, help="Uploaded catalyst slab/framework (CIF, POSCAR/CONTCAR, XYZ, EXTXYZ, TRAJ, or another ASE-readable file)")
+    parser.add_argument("--active-atom-indices", nargs="+", type=int, help="Zero-based catalyst atom indices defining the candidate active region")
+    parser.add_argument("--site-xy", nargs=2, type=float, action="append", metavar=("X", "Y"), help="Explicit Cartesian adsorption coordinate; repeat for multiple sites")
     parser.add_argument("--execute", action="store_true", help="Run after printing the validated plan")
     parser.add_argument("--yes", action="store_true", help="Skip interactive confirmation")
     args = parser.parse_args()
@@ -200,6 +202,10 @@ def main():
             command = [sys.executable, str(ROOT / "predict_adsorption.py")]
             if plan["mode"] == "ase_uploaded_prediction":
                 command += ["--structure", plan["uploaded_structure"]]
+                if args.active_atom_indices:
+                    command += ["--active-atom-indices", *map(str, args.active_atom_indices)]
+                for xy in args.site_xy or []:
+                    command += ["--site-xy", *map(str, xy)]
             else:
                 command += ["--metal", plan["metals"][0], "--facet", plan["facet"]]
             command += ["--adsorbate", adsorbate, "--output", str(prediction_root / adsorbate)]
