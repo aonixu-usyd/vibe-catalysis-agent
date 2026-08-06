@@ -18,8 +18,11 @@ Backend: scripts/predict_adsorption.py
 Launcher: scripts/run_local.py
 ```
 
-Run `<python> scripts/run_local.py --check` before the first calculation in a task. Stop
-and explain the missing dependency if it fails. Never request or print the
+Run `python3 scripts/run_local.py --check` before the first calculation in a task.
+The launcher must choose the working runtime reported by that check; it searches
+`VIBE_CATALYSIS_PYTHON` and common `cathub-uma` Conda locations, so the Python
+used to start the launcher does not itself need ASE. Stop and explain the missing
+dependency only if this launcher check fails after its search. Never request or print the
 Hugging Face token; FAIR-Chem reads the existing local login and cached model.
 The user must separately obtain access to the gated `facebook/UMA` model and
 authenticate through Hugging Face. Access and model weights are not bundled.
