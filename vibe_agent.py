@@ -18,8 +18,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SUPPORTED_METALS = ("Cu", "Ag", "Au", "Pt", "Pd")
-SUPPORTED_ADSORBATES = ("H", "O", "OH", "C", "CH", "CH2", "CH3")
-UNSUPPORTED_COH_SPECIES = ("CO2", "CHO", "COH", "CO")
+DATASET_ADSORBATES = ("H", "O", "OH", "C", "CH", "CH2", "CH3")
+PREDICTION_ADSORBATES = ("CO", "CHO", "COH", "CHOH", "CH2OH")
+SUPPORTED_ADSORBATES = DATASET_ADSORBATES + PREDICTION_ADSORBATES
 
 METAL_ALIASES = {
     "Cu": ("cu", "copper", "铜", "銅", "cobre", "cuivre", "kupfer", "銅"),
@@ -29,6 +30,11 @@ METAL_ALIASES = {
     "Pd": ("pd", "palladium", "钯", "鈀", "paladio", "palladium"),
 }
 ADS_ALIASES = {
+    "CH2OH": ("ch2oh", "ch₂oh", "hydroxymethyl", "羟甲基"),
+    "CHOH": ("choh", "hydroxymethylene", "羟基亚甲基"),
+    "COH": ("coh", "hydroxycarbyne", "羟基碳"),
+    "CHO": ("cho", "hco", "formyl", "甲酰基"),
+    "CO": ("co", "carbon monoxide", "一氧化碳"),
     "CH3": ("ch3", "ch₃", "methyl", "甲基", "metilo", "méthyle"),
     "CH2": ("ch2", "ch₂", "methylene", "亚甲基", "metileno", "méthylène"),
     "CH": ("ch", "methylidyne", "次甲基", "metilidino", "méthylidyne"),
@@ -48,14 +54,8 @@ def contains_alias(text: str, alias: str) -> bool:
 
 def parse_prompt(prompt: str) -> dict:
     text = prompt.lower().replace("（", "(").replace("）", ")")
-    requested_unsupported = [species for species in UNSUPPORTED_COH_SPECIES if contains_alias(text, species.lower())]
-    if requested_unsupported:
-        species = ", ".join(requested_unsupported)
-        raise ValueError(
-            f"Unsupported adsorbate in the packaged MamunHighT2019 subset: {species}. "
-            "Available adsorbates are H, O, OH, C, CH, CH2, and CH3. "
-            "No calculation was started."
-        )
+    if contains_alias(text, "co2"):
+        raise ValueError("CO2 is not yet supported by the automatic builder; no calculation was started.")
     metals = [
         symbol for symbol, aliases in METAL_ALIASES.items()
         if any(contains_alias(text, a) for a in aliases)
@@ -63,7 +63,7 @@ def parse_prompt(prompt: str) -> dict:
     ]
     adsorbates = []
     masked = text
-    for species in ("CH3", "CH2", "OH", "CH"):
+    for species in ("CH2OH", "CHOH", "COH", "CHO", "CO", "CH3", "CH2", "OH", "CH"):
         if any(contains_alias(masked, a) for a in ADS_ALIASES[species]):
             adsorbates.append(species)
             for alias in ADS_ALIASES[species]: masked = masked.replace(alias.lower(), " ")
@@ -80,13 +80,27 @@ def parse_prompt(prompt: str) -> dict:
     facet_match = re.search(r"(?:facet|surface|晶面|面)?\s*\(?\s*(\d)\s*[, ]?\s*(\d)\s*[, ]?\s*(\d)\s*\)?", text)
     facet = "".join(facet_match.groups()) if facet_match else "111"
     if facet != "111": raise ValueError(f"This dataset-backed baseline currently supports only facet 111, not {facet}.")
+    prediction_species = [x for x in adsorbates if x in PREDICTION_ADSORBATES]
+    dataset_species = [x for x in adsorbates if x in DATASET_ADSORBATES]
+    if prediction_species and dataset_species:
+        raise ValueError("A single job cannot mix database-backed and automatically modelled adsorbates yet; split it into two requests.")
+    if len(metals) != 1 and prediction_species:
+        raise ValueError("Automatic modelling currently runs one metal per job; submit separate requests for each metal.")
+    mode = "ase_automatic_prediction" if prediction_species else "cathub_dataset_benchmark"
     return {
         "metals": metals, "facet": facet, "adsorbates": adsorbates,
-        "reference_dataset": "MamunHighT2019", "calculator": "uma-s-1p2",
+        "mode": mode,
+        "reference_dataset": None if prediction_species else "MamunHighT2019", "calculator": "uma-s-1p2",
         "task": "oc20", "calculations": ["single_point", "constrained_relaxation"],
-        "constraints": "deposited FixAtoms (bottom 8 of 12 slab atoms)",
+        "constraints": ("ASE FixAtoms on bottom 2 of 4 generated slab layers" if prediction_species
+                        else "deposited FixAtoms (bottom 8 of 12 slab atoms)"),
         "optimizer": {"name": "LBFGS", "fmax_eV_per_A": 0.05, "max_steps": 100},
-        "outputs": ["json", "csv", "metrics", "parity_plot"],
+        "site_enumeration": (["ontop", "bridge", "fcc", "hcp"] if prediction_species else None),
+        "orientation_enumeration": ("CO: C-down and O-down; larger intermediates: 0/120/240 degree azimuths" if prediction_species else None),
+        "scientific_label": ("UMA prediction on ASE-generated structures; no DFT reference" if prediction_species
+                             else "Catalysis-Hub DFT benchmark"),
+        "outputs": (["plan", "candidate_csv", "summary_json", "initial_and_final_structures", "best_structure"]
+                    if prediction_species else ["json", "csv", "metrics", "parity_plot"]),
     }
 
 
@@ -111,7 +125,15 @@ def main():
     print(f"\nValidated plan saved to: {plan_path}")
     if not args.execute: return
     if not args.yes and input("Run this plan? [y/N] ").strip().lower() not in {"y", "yes", "是"}: return
-    command = [sys.executable, str(ROOT / "run_catbench_subset.py"), "--source", str(ROOT / "raw_data/Mamun_noble_C1_subset_adsorption.json"), "--benchmark-name", job_name, "--mlip-name", f"UMA-{job_name}", "--metals", *plan["metals"], "--adsorbates", *plan["adsorbates"]]
+    if plan["mode"] == "ase_automatic_prediction":
+        command = [
+            sys.executable, str(ROOT / "predict_adsorption.py"),
+            "--metal", plan["metals"][0], "--facet", plan["facet"],
+            "--adsorbate", plan["adsorbates"][0],
+            "--output", str(ROOT / "results" / job_name),
+        ]
+    else:
+        command = [sys.executable, str(ROOT / "run_catbench_subset.py"), "--source", str(ROOT / "raw_data/Mamun_noble_C1_subset_adsorption.json"), "--benchmark-name", job_name, "--mlip-name", f"UMA-{job_name}", "--metals", *plan["metals"], "--adsorbates", *plan["adsorbates"]]
     subprocess.run(command, cwd=ROOT, check=True)
     print(f"\nCalculation complete. Raw CatBench result: {ROOT / 'result' / f'UMA-{job_name}'}")
 

@@ -1,0 +1,35 @@
+{
+  "metal": "Cu",
+  "facet": "111",
+  "adsorbate": "CO",
+  "sites": [
+    "ontop",
+    "bridge",
+    "fcc",
+    "hcp"
+  ],
+  "anchors": [
+    "C",
+    "O"
+  ],
+  "azimuths": [
+    0
+  ],
+  "size": [
+    3,
+    3,
+    4
+  ],
+  "vacuum": 10.0,
+  "fixed_layers": 2,
+  "height": 1.85,
+  "fmax": 0.05,
+  "max_steps": 100,
+  "model": "uma-s-1p2",
+  "device": "cpu",
+  "output": "/Users/aoxu0979/Documents/Codex/2026-08-06/referenced-chatgpt-conversation-this-is-an/outputs/vibe-catalysis-agent-repo/results/demo_CO_Cu111_auto",
+  "single_point_only": false,
+  "energy_definition": "E_ads = E_relaxed(slab+X) - E_relaxed(slab) - E_relaxed(X_gas)",
+  "provenance": "ASE-generated prediction; no DFT reference",
+  "created_utc": "20260806T125628Z"
+}

@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from vibe_agent import parse_prompt
+from predict_adsorption import build_candidate, build_slab, gas_reference, molecule_template
 
 
 ROOT = Path(__file__).resolve().parent
@@ -34,13 +35,29 @@ def offline_tests():
         pass
     else:
         raise AssertionError("Unsupported Cu(100) request was not rejected")
-    try:
-        parse_prompt("计算CO在Cu111上的吸附能")
-    except ValueError as error:
-        assert "CO" in str(error)
-    else:
-        raise AssertionError("Unsupported CO request was not rejected")
-    print(f"PASS: {len(CASES)} multilingual parser cases and 2 safety rejections")
+    auto_cases = [
+        ("计算CO在Cu111上的吸附能", "Cu", "CO"),
+        ("Calculate CHO adsorption on Pt(111)", "Pt", "CHO"),
+        ("计算COH在Pd(111)上的吸附", "Pd", "COH"),
+        ("计算CHOH在Ag(111)上的吸附", "Ag", "CHOH"),
+        ("计算CH2OH在Au(111)上的吸附", "Au", "CH2OH"),
+    ]
+    for prompt, metal, adsorbate in auto_cases:
+        plan = parse_prompt(prompt)
+        assert plan["mode"] == "ase_automatic_prediction"
+        assert plan["metals"] == [metal]
+        assert plan["adsorbates"] == [adsorbate]
+    slab, fixed = build_slab("Cu", (2, 2, 4), 8.0, 2)
+    assert len(slab) == 16 and len(fixed) == 8
+    co, bonds = molecule_template("CO", "C", 0)
+    assert co.get_chemical_symbols() == ["C", "O"] and bonds == [(0, 1)]
+    oh_down, _ = molecule_template("CO", "O", 0)
+    assert oh_down.get_chemical_symbols() == ["O", "C"]
+    candidate, ads_indices, _ = build_candidate(slab, "CO", "ontop", "C", 0, 1.85)
+    assert len(candidate) == 18 and len(ads_indices) == 2
+    assert set(candidate.get_tags()[ads_indices]) == {2}
+    assert gas_reference("CH2OH").pbc.tolist() == [False, False, False]
+    print(f"PASS: {len(CASES)} dataset parser cases, {len(auto_cases)} automatic parser cases, builder constraints/orientations, and 1 safety rejection")
 
 
 def integration_test():
