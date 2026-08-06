@@ -133,7 +133,10 @@ Use the backend's visualization rule: one accepted value becomes a numerical
 energy card; multiple sites become a lowest-energy-per-site bar chart; multiple
 requested adsorbates become a step-style adsorption-energy profile. Include
 ASE-native relaxed-structure top views with standard element colours, radii,
-and the periodic unit cell. Label a multi-adsorbate profile as independently
+and the periodic unit cell. Use the bundled publication theme: Times New Roman,
+Times, or DejaVu Serif fallback; STIX math; 1.8-point axes and major ticks;
+7-point major tick length; 11--19 point text hierarchy; and 300 dpi PNG output.
+Label a multi-adsorbate profile as independently
 referenced adsorption energies, not a balanced reaction or free-energy diagram.
 A CHE electronic-energy diagram uses a consistent H₂ chemical potential, but
 is not a full free-energy diagram unless ZPE, entropy, solvation, field and

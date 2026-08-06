@@ -1,6 +1,6 @@
 {
   "name": "vibe-catalysis",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Build, import, relax, compare, and visualize heterogeneous-catalysis adsorption structures with ASE and FAIR-Chem UMA.",
   "author": {
     "name": "Aoni Xu",

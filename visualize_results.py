@@ -16,6 +16,24 @@ import numpy as np
 from ase.io import read
 from ase.visualize.plot import plot_atoms
 
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
+    "mathtext.fontset": "stix",
+    "font.size": 12,
+    "axes.titlesize": 13,
+    "axes.labelsize": 12,
+    "axes.linewidth": 1.8,
+    "xtick.labelsize": 11,
+    "ytick.labelsize": 11,
+    "xtick.major.width": 1.8,
+    "ytick.major.width": 1.8,
+    "xtick.major.size": 7,
+    "ytick.major.size": 7,
+    "legend.fontsize": 11,
+    "savefig.dpi": 300,
+})
+
 
 INK = "#172033"
 MUTED = "#667085"
@@ -64,17 +82,17 @@ def draw_top_view(ax, atoms, title: str) -> None:
         show_unit_cell=1,
         radii=0.72,
     )
-    ax.set_title(title, fontsize=10, color=INK, pad=8, weight="bold")
+    ax.set_title(title, fontsize=12, color=INK, pad=9, weight="bold")
     ax.set_facecolor(PAPER)
 
 
 def style_energy_axis(ax) -> None:
     ax.spines[["top", "right", "left"]].set_visible(False)
     ax.spines["bottom"].set_color(GRID)
-    ax.tick_params(colors=MUTED, labelsize=9)
-    ax.grid(axis="y", color=GRID, linewidth=0.8, zorder=0)
-    ax.axhline(0, color=INK, linewidth=0.9, zorder=1)
-    ax.set_ylabel("Adsorption energy, eV", color=INK, fontsize=10)
+    ax.tick_params(colors=MUTED)
+    ax.grid(axis="y", color=GRID, linewidth=1.0, zorder=0)
+    ax.axhline(0, color=INK, linewidth=1.4, zorder=1)
+    ax.set_ylabel("Adsorption energy, eV", color=INK)
 
 
 def compute_che_states(labels: list[str], totals: list[float], h2_energy: float,
@@ -109,24 +127,24 @@ def render_single_job(job_dir: Path, output: Path | None = None) -> Path:
         surface = f"{summary['metal']} {crystal}({summary['facet'].replace('m', '-')})".replace("  ", " ")
     output = output or job_dir / "energy_and_topviews.png"
     count = min(len(rows), 4)
-    fig = plt.figure(figsize=(10.8, 6.3), facecolor="white")
+    fig = plt.figure(figsize=(11.8, 7.0), facecolor="white")
     grid = fig.add_gridspec(2, max(count, 2), height_ratios=(1.45, 1), hspace=0.42, wspace=0.18)
     fig.subplots_adjust(top=0.84, bottom=0.09)
     energy_ax = fig.add_subplot(grid[0, :])
     fig.suptitle(f"{summary['adsorbate']} adsorption · {surface}", x=0.06, y=0.965,
-                 ha="left", fontsize=17, color=INK, weight="bold")
+                 ha="left", fontsize=19, color=INK, weight="bold")
     fig.text(0.06, 0.916, "FAIR-Chem UMA · relaxed ASE structures · lower is more stable",
-             color=MUTED, fontsize=9.5)
+             color=MUTED, fontsize=11)
 
     if len(rows) == 1:
         value = rows[0]["energy"]
         energy_ax.axis("off")
         energy_ax.text(0.03, 0.58, f"{value:+.3f}", transform=energy_ax.transAxes,
-                       fontsize=43, color=BLUE, weight="bold", va="center")
+                       fontsize=46, color=BLUE, weight="bold", va="center")
         energy_ax.text(0.305, 0.58, "eV", transform=energy_ax.transAxes,
-                       fontsize=17, color=MUTED, va="center")
+                       fontsize=19, color=MUTED, va="center")
         energy_ax.text(0.035, 0.30, f"{rows[0]['site']} · {rows[0]['anchor']}-down · {rows[0]['azimuth_deg']}°",
-                       transform=energy_ax.transAxes, fontsize=11, color=INK)
+                       transform=energy_ax.transAxes, fontsize=12, color=INK)
         mode = "single_energy"
     else:
         labels = [row["site"] for row in rows]
@@ -139,9 +157,9 @@ def render_single_job(job_dir: Path, output: Path | None = None) -> Path:
             offset = -5 if value < 0 else 5
             energy_ax.annotate(f"{value:+.3f}", (bar.get_x() + bar.get_width() / 2, value),
                                xytext=(0, offset), textcoords="offset points", ha="center", va=va,
-                               fontsize=9, color=INK, weight="bold")
+                               fontsize=11, color=INK, weight="bold")
         energy_ax.set_title("Lowest accepted orientation at each adsorption site", loc="left",
-                            fontsize=10.5, color=INK, pad=10)
+                            fontsize=13, color=INK, pad=10)
         mode = "site_comparison"
 
     for i, row in enumerate(rows[:count]):
@@ -150,8 +168,8 @@ def render_single_job(job_dir: Path, output: Path | None = None) -> Path:
     for i in range(count, max(count, 2)):
         fig.add_subplot(grid[1, i]).axis("off")
     fig.text(0.06, 0.025, summary.get("scientific_label", "UMA prediction · not a Catalysis-Hub DFT benchmark"),
-             fontsize=8.5, color=MUTED)
-    fig.savefig(output, dpi=220, bbox_inches="tight", facecolor="white")
+             fontsize=10, color=MUTED)
+    fig.savefig(output, dpi=300, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     metadata = {"visualization_mode": mode, "image": str(output), "plotted_candidates": rows[:count]}
     (job_dir / "visualization.json").write_text(json.dumps(metadata, indent=2))
@@ -176,34 +194,34 @@ def render_profile(job_dirs: list[Path], output: Path, potential_v: float = 0.0,
             labels, [row["total_energy"] for row in best], h2_energy,
             potential_v, ph, temperature_k,
         )
-    fig = plt.figure(figsize=(11.5, 6.5), facecolor="white")
+    fig = plt.figure(figsize=(12.4, 7.0), facecolor="white")
     grid = fig.add_gridspec(2, max(len(jobs), 2), height_ratios=(1.45, 1), hspace=0.42, wspace=0.18)
     fig.subplots_adjust(top=0.84, bottom=0.09)
     ax = fig.add_subplot(grid[0, :])
     fig.suptitle("CHE hydrogenation-energy profile" if che_mode else "Best adsorption-energy profile", x=0.06, y=0.965, ha="left",
-                 fontsize=17, color=INK, weight="bold")
+                 fontsize=19, color=INK, weight="bold")
     fig.text(0.06, 0.916, (f"½H₂ reference · U={potential_v:+.2f} V vs SHE · pH {ph:g} · {temperature_k:g} K"
              if che_mode else "Step-style comparison · independent molecular gas references"),
-             color=MUTED, fontsize=9.5)
+             color=MUTED, fontsize=11)
     x = np.arange(len(energies), dtype=float)
     half = 0.32
     for i, (xi, energy) in enumerate(zip(x, energies)):
         ax.hlines(energy, xi - half, xi + half, color=BLUE, linewidth=5, zorder=3)
         ax.text(xi, energy + (0.07 if energy >= 0 else -0.07), f"{energy:+.3f}",
                 ha="center", va="bottom" if energy >= 0 else "top", color=INK,
-                fontsize=9.5, weight="bold")
+                fontsize=11, weight="bold")
         if i < len(energies) - 1:
             ax.plot([xi + half, x[i + 1] - half], [energy, energies[i + 1]],
                     color="#98A2B3", linewidth=1.5, zorder=2)
     ax.set_xticks(x, labels)
     style_energy_axis(ax)
     if che_mode:
-        ax.set_ylabel("Energy relative to reference state, eV", color=INK, fontsize=10)
+        ax.set_ylabel("Energy relative to reference state, eV", color=INK)
         ax.set_title("Electronic-energy CHE approximation; ZPE, entropy and solvation are not included", loc="left",
-                     fontsize=10.5, color=RED, pad=10)
+                     fontsize=12, color=RED, pad=10)
     else:
         ax.set_title("For screening only — this is not a balanced reaction free-energy diagram", loc="left",
-                     fontsize=10.5, color=RED, pad=10)
+                     fontsize=12, color=RED, pad=10)
     for i, (job, row) in enumerate(zip(jobs, best)):
         top = fig.add_subplot(grid[1, i])
         draw_top_view(top, structure_for(job, row), f"{labels[i]} · {row['site']}")
@@ -211,8 +229,8 @@ def render_profile(job_dirs: list[Path], output: Path, potential_v: float = 0.0,
         fig.add_subplot(grid[1, i]).axis("off")
     fig.text(0.06, 0.025, ("ΔE(CO*→CHO*) = E(CHO*) − E(CO*) − ½E(H₂); potential/pH corrections use the CHE convention."
              if che_mode else "Eads values use a different gas-phase molecular reference for each intermediate."),
-             fontsize=8.5, color=MUTED)
-    fig.savefig(output, dpi=220, bbox_inches="tight", facecolor="white")
+             fontsize=10, color=MUTED)
+    fig.savefig(output, dpi=300, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     metadata = {
         "visualization_mode": "che_hydrogenation_profile" if che_mode else "adsorption_energy_profile",
