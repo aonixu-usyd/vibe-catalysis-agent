@@ -1,0 +1,38 @@
+{
+  "positive": [
+    {
+      "prompt": "Calculate CO adsorption on Cu(111) and compare all sites.",
+      "expected": "Build fcc(111), fix the bottom two layers, enumerate ASE sites and CO orientations, run UMA, rank accepted structures, and return a bar chart with ASE-native top views."
+    },
+    {
+      "prompt": "计算CHO在Co(0001)上的吸附能。",
+      "expected": "Recognize Chinese input, build hcp(0001), enumerate C-down azimuths, run constrained relaxation, and report the best accepted result with files."
+    },
+    {
+      "prompt": "Calculate one C-down CO structure at the ontop site of Fe(110).",
+      "expected": "Build bcc(110), evaluate only ontop/C-down, and return a numerical energy card with an ASE top view."
+    },
+    {
+      "prompt": "Compare CO and CHO adsorption on Pt(111) and draw an energy profile.",
+      "expected": "Run separate child calculations, create a step-style adsorption-energy profile, and state that independently referenced Eads values are not a balanced reaction free-energy diagram."
+    },
+    {
+      "prompt": "Relax CO on Ru(10-10) while keeping the bottom two layers fixed.",
+      "expected": "Normalize the hcp facet, use ASE's available sites, retain FixAtoms constraints, and save optimized structures, logs, energies, and visualization."
+    }
+  ],
+  "negative": [
+    {
+      "prompt": "Calculate CO on diamond C(111).",
+      "expected": "Reject or explain that this workflow supports elemental fcc, bcc, or hcp metals, not diamond surfaces."
+    },
+    {
+      "prompt": "Give me an experimentally validated CO oxidation barrier from UMA.",
+      "expected": "Do not claim experimental validation or a transition-state barrier; explain that transition states are outside the workflow."
+    },
+    {
+      "prompt": "Publish the UMA result as an exact Catalysis-Hub DFT value.",
+      "expected": "Refuse to relabel a prediction as DFT and preserve the scientific provenance warning."
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "name": "vibe-catalysis",
+  "version": "1.0.0",
+  "description": "Build, relax, compare, and visualize heterogeneous-catalysis adsorption structures with ASE and FAIR-Chem UMA.",
+  "author": {
+    "name": "Aoni Xu",
+    "url": "https://github.com/aonixu-usyd"
+  },
+  "homepage": "https://github.com/aonixu-usyd/vibe-catalysis-agent",
+  "repository": "https://github.com/aonixu-usyd/vibe-catalysis-agent",
+  "keywords": ["catalysis", "ASE", "FAIR-Chem", "UMA", "adsorption"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Vibe Catalysis",
+    "shortDescription": "Run ASE + UMA adsorption workflows from natural language.",
+    "longDescription": "Generate elemental fcc, bcc, or hcp metal surfaces, enumerate adsorption sites, preserve fixed slab layers, run FAIR-Chem UMA single-point or relaxation calculations, rank accepted structures, and produce energy plots with ASE-native top views.",
+    "developerName": "Aoni Xu",
+    "category": "Developer Tools",
+    "capabilities": ["Local computation", "Scientific visualization"],
+    "websiteURL": "https://github.com/aonixu-usyd/vibe-catalysis-agent",
+    "defaultPrompt": [
+      "Calculate CO adsorption on Cu(111) and compare sites.",
+      "Relax CHO on Fe(110) with the bottom layers fixed.",
+      "Compare CO and CHO adsorption and draw an energy profile."
+    ],
+    "brandColor": "#2563EB",
+    "composerIcon": "./assets/logo.png",
+    "logo": "./assets/logo.png",
+    "screenshots": ["./assets/screenshot.png"]
+  }
+}
