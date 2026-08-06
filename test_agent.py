@@ -8,7 +8,10 @@ import sys
 from pathlib import Path
 
 from vibe_agent import parse_prompt
-from predict_adsorption import build_candidate, build_slab, gas_reference, molecule_template
+from predict_adsorption import (
+    build_candidate, build_slab, discover_custom_sites, gas_reference,
+    molecule_template,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -49,6 +52,13 @@ def offline_tests():
         assert plan["adsorbates"] == [adsorbate]
     multi_plan = parse_prompt("计算CO和CHO在Cu(111)上的吸附能")
     assert multi_plan["adsorbates"] == ["CO", "CHO"]
+    uploaded_plan = parse_prompt(
+        "用上传的 POSCAR 计算 CO 吸附能", "/tmp/example/POSCAR"
+    )
+    assert uploaded_plan["mode"] == "ase_uploaded_prediction"
+    assert uploaded_plan["metals"] == [] and uploaded_plan["facet"] == "custom"
+    assert uploaded_plan["adsorbates"] == ["CO"]
+    assert uploaded_plan["uploaded_structure"].endswith("/tmp/example/POSCAR")
     expanded_cases = [
         ("计算CO在Ni(100)上的吸附能", "Ni", "fcc", "100"),
         ("Calculate CO adsorption on Fe(110)", "Fe", "bcc", "110"),
@@ -64,6 +74,10 @@ def offline_tests():
     slab, fixed, metadata, sites = build_slab("Cu", "111", (2, 2, 4), 8.0, 2)
     assert len(slab) == 16 and len(fixed) == 8
     assert metadata["crystal_structure"] == "fcc" and set(sites) == {"ontop", "bridge", "fcc", "hcp"}
+    custom_sites = discover_custom_sites(slab, ("ontop", "bridge", "hollow"), 0.6, 6)
+    assert any(name.startswith("ontop_") for name in custom_sites)
+    assert any(name.startswith("bridge_") for name in custom_sites)
+    assert any(name.startswith("hollow_") for name in custom_sites)
     fe, fe_fixed, fe_metadata, fe_sites = build_slab("Fe", "110", (2, 2, 4), 8.0, 2)
     assert fe_metadata["crystal_structure"] == "bcc" and "hollow" in fe_sites and fe_fixed
     co_slab, co_fixed, co_metadata, co_sites = build_slab("Co", "0001", (2, 2, 4), 8.0, 2)
@@ -76,7 +90,7 @@ def offline_tests():
     assert len(candidate) == 18 and len(ads_indices) == 2
     assert set(candidate.get_tags()[ads_indices]) == {2}
     assert gas_reference("CH2OH").pbc.tolist() == [False, False, False]
-    print(f"PASS: {len(CASES)} dataset parser cases, {len(auto_cases) + len(expanded_cases)} automatic parser cases, fcc/bcc/hcp builders, constraints/orientations, and 1 safety rejection")
+    print(f"PASS: {len(CASES)} dataset parser cases, {len(auto_cases) + len(expanded_cases)} generated-surface parser cases, uploaded-structure planning/site discovery, fcc/bcc/hcp builders, constraints/orientations, and 1 safety rejection")
 
 
 def integration_test():

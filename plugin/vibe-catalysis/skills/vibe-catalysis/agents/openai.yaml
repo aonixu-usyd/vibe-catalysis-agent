@@ -1,4 +1,4 @@
 interface:
   display_name: "Vibe Catalysis"
-  short_description: "Run elemental-metal ASE + UMA adsorption workflows"
-  default_prompt: "Use $vibe-catalysis to calculate CO adsorption on Fe(110) with local ASE and UMA."
+  short_description: "Run ASE + UMA adsorption on generated or uploaded slabs"
+  default_prompt: "Use $vibe-catalysis to calculate CO adsorption on a generated surface or my uploaded clean catalyst structure with local ASE and UMA."

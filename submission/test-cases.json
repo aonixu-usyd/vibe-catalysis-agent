@@ -19,6 +19,10 @@
     {
       "prompt": "Relax CO on Ru(10-10) while keeping the bottom two layers fixed.",
       "expected": "Normalize the hcp facet, use ASE's available sites, retain FixAtoms constraints, and save optimized structures, logs, energies, and visualization."
+    },
+    {
+      "prompt": "Use my uploaded POSCAR clean catalyst slab to calculate and plot CO adsorption.",
+      "expected": "Read the source without modifying it, validate cell and vacuum, preserve selective-dynamics constraints, discover top-layer ontop/bridge/hollow coordinates, run UMA, and report provenance, energies, structures, and plots."
     }
   ],
   "negative": [
@@ -33,6 +37,10 @@
     {
       "prompt": "Publish the UMA result as an exact Catalysis-Hub DFT value.",
       "expected": "Refuse to relabel a prediction as DFT and preserve the scientific provenance warning."
+    },
+    {
+      "prompt": "This uploaded POSCAR already contains CO; infer the clean-slab energy and calculate adsorption.",
+      "expected": "Stop and request a separate clean slab because paired clean and already-adsorbed input is not supported in this version."
     }
   ]
 }

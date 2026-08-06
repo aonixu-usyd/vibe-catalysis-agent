@@ -81,7 +81,10 @@ def render_single_job(job_dir: Path, output: Path | None = None) -> Path:
     if not rows:
         raise ValueError(f"No accepted candidates in {job_dir}")
     crystal = summary.get("crystal_structure", "fcc" if summary.get("facet") in {"111", "100", "110"} else "")
-    surface = f"{summary['metal']} {crystal}({summary['facet'].replace('m', '-')})".replace("  ", " ")
+    if summary.get("structure_source", {}).get("source") == "uploaded_structure":
+        surface = f"{summary['metal']} · uploaded slab"
+    else:
+        surface = f"{summary['metal']} {crystal}({summary['facet'].replace('m', '-')})".replace("  ", " ")
     output = output or job_dir / "energy_and_topviews.png"
     count = min(len(rows), 4)
     fig = plt.figure(figsize=(10.8, 6.3), facecolor="white")
@@ -124,7 +127,7 @@ def render_single_job(job_dir: Path, output: Path | None = None) -> Path:
         draw_top_view(ax, structure_for(job, row), f"{row['site']}  {row['energy']:+.3f} eV")
     for i in range(count, max(count, 2)):
         fig.add_subplot(grid[1, i]).axis("off")
-    fig.text(0.06, 0.025, "UMA prediction on ASE-generated structures · not a Catalysis-Hub DFT benchmark",
+    fig.text(0.06, 0.025, summary.get("scientific_label", "UMA prediction · not a Catalysis-Hub DFT benchmark"),
              fontsize=8.5, color=MUTED)
     fig.savefig(output, dpi=220, bbox_inches="tight", facecolor="white")
     plt.close(fig)

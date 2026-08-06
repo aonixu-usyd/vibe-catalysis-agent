@@ -12,13 +12,17 @@ The agent converts a request such as:
 into a validated calculation plan, preserves the deposited slab constraints,
 and runs UMA single-point energies plus constrained ASE relaxation.
 
-It has two deliberately separated modes:
+It has three deliberately separated modes:
 
 1. **Database-backed benchmark:** H/O/OH/C/CH/CH2/CH3 structures from
    `MamunHighT2019` are compared directly with deposited DFT references.
 2. **ASE automatic prediction:** CO/CHO/COH/CHOH/CH2OH structures are generated
    from scratch, relaxed with UMA, screened for failed geometries, and ranked.
    These are predictions, not DFT benchmark values.
+3. **Uploaded clean slab prediction:** an ASE-readable CIF, POSCAR/CONTCAR,
+   XYZ/EXTXYZ, or TRAJ structure supplies the catalyst slab. The workflow
+   discovers top-layer adsorption coordinates, preserves existing constraints
+   (or fixes the bottom layers), and runs the same UMA screening and graphics.
 
 ## What is included
 
@@ -32,6 +36,8 @@ It has two deliberately separated modes:
 - Offline parser tests and a real Cu(111)/H integration test.
 - A 31-case Cu/Ag/Au/Pt/Pd benchmark and parity plot.
 - Automatic ASE reference-state detection for elemental fcc/bcc/hcp metals.
+- User-supplied catalyst slabs, including alloys, oxides, defects, and supported
+  models, provided they are already prepared as a clean periodic slab.
 - Common low-index surfaces: fcc(111/100/110), bcc(111/100/110), and
   hcp(0001/10-10).
 - Surface-specific ASE high-symmetry sites; site names are never copied from an
@@ -152,6 +158,49 @@ python predict_adsorption.py \
   --metal Fe --facet 110 --adsorbate CO \
   --size 3 3 4 --fixed-layers 2
 ```
+
+### Use your own catalyst model
+
+Pass the uploaded/local structure separately from the natural-language request:
+
+```bash
+python vibe_agent.py \
+  "用这个上传的催化剂模型计算 CO 吸附能" \
+  --structure /path/to/POSCAR --execute --yes
+```
+
+Or call the scientific backend directly:
+
+```bash
+python predict_adsorption.py \
+  --structure /path/to/catalyst.cif --adsorbate CO
+```
+
+Supported input includes CIF, POSCAR/CONTCAR, XYZ, EXTXYZ, TRAJ, and other
+formats readable by ASE. The input must be a **clean slab**, not a structure
+that already contains the adsorbate. The source file is read-only: every
+generated candidate and relaxed result is written to the result directory.
+
+For an uploaded structure, the workflow:
+
+- checks the cell, in-plane periodicity, and approximate vacuum;
+- preserves `FixAtoms`/selective-dynamics constraints when ASE reads them;
+- otherwise fixes the requested number of bottom atomic layers;
+- discovers indexed `ontop`, `bridge`, and threefold `hollow` coordinates from
+  the uppermost surface atoms, with a configurable cap per site type;
+- records the absolute source path, SHA-256 hash, formula, constraints, and
+  validation warnings in `plan.json` and `summary.json`.
+
+Use `--site-types`, `--top-layer-tolerance`, and `--max-sites-per-type` to tune
+automatic discovery. For a known adsorption coordinate, bypass discovery with
+one or more `--site-xy X Y` options. Add `--replace-constraints` only when you
+intentionally want to discard constraints read from the source and regenerate
+bottom-layer constraints.
+
+Automatic coordinate discovery is a screening heuristic, especially for
+reconstructed, stepped, porous, or multicomponent surfaces. Review the ASE top
+views and candidate table before interpreting the energies. Paired
+clean+already-adsorbed input is not yet supported.
 
 If `--sites` is omitted, every named ASE site available for that surface is
 used. Examples include:

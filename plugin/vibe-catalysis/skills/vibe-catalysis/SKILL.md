@@ -1,6 +1,6 @@
 ---
 name: vibe-catalysis
-description: Build and run local heterogeneous-catalysis adsorption calculations with ASE and FAIR-Chem UMA. Use when a user asks Codex in natural language to model, relax, rank, inspect, or estimate adsorption energies for CO, CHO/HCO, COH, CHOH, or CH2OH on an elemental fcc, bcc, or hcp metal and a supported low-index surface, or asks for the Vibe Catalysis ten-step workflow, adsorption-site enumeration, fixed slab layers, UMA relaxation, or generated structure/result files.
+description: Build and run local heterogeneous-catalysis adsorption calculations with ASE and FAIR-Chem UMA. Use when a user asks Codex to model, relax, rank, inspect, or estimate adsorption energies for CO, CHO/HCO, COH, CHOH, or CH2OH on a generated elemental fcc/bcc/hcp surface or a user-supplied clean catalyst slab such as CIF, POSCAR/CONTCAR, XYZ/EXTXYZ, or TRAJ; also use for the Vibe Catalysis ten-step workflow, adsorption-site enumeration, fixed slab layers, UMA relaxation, data processing, plots, or generated structure/result files.
 ---
 
 # Vibe Catalysis
@@ -28,9 +28,10 @@ authenticate through Hugging Face. Access and model weights are not bundled.
 
 Extract:
 
-- metal: an elemental metal whose ASE reference state is `fcc`, `bcc`, or `hcp`;
-- facet: fcc `111`/`100`/`110`, bcc `111`/`100`/`110`, or hcp
-  `0001`/`10-10`;
+- structure source: either an attached/local clean slab readable by ASE, or an
+  elemental metal whose ASE reference state is `fcc`, `bcc`, or `hcp`;
+- facet for generated slabs: fcc `111`/`100`/`110`, bcc `111`/`100`/`110`, or
+  hcp `0001`/`10-10`;
 - adsorbate: `CO`, `CHO`, `COH`, `CHOH`, or `CH2OH`;
 - optional slab size, sites, anchors, vacuum, fixed layers, `fmax`, and steps.
 
@@ -41,13 +42,21 @@ crystal structure from ASE. If the facet is omitted, use fcc(111), bcc(110),
 or hcp(0001). Run one metal per job; multiple requested adsorbates may run as
 separate child calculations under one comparison directory.
 
+When the user supplies a structure, resolve its local absolute path and pass it
+with `--structure`; do not require a metal or facet. Treat it as a **clean
+slab**. Never modify or overwrite the uploaded source. CIF, POSCAR/CONTCAR,
+XYZ/EXTXYZ, TRAJ, and any other format readable by ASE are acceptable, but CIF
+usually cannot preserve VASP selective-dynamics constraints. If the file
+already contains an adsorbate, stop and request a clean slab; paired clean and
+adsorbed inputs are outside this version.
+
 ## Execute the ten-step workflow
 
-1. Detect the elemental ASE reference structure and build the requested supported low-index slab.
-2. Add vacuum and periodicity only in the surface plane.
-3. apply `FixAtoms` to the bottom two layers.
+1. Build a supported elemental slab, or read the user-supplied clean catalyst structure without changing the source.
+2. Validate its 3D cell, in-plane periodicity, and approximate vacuum; for generated structures, add vacuum and surface-plane periodicity.
+3. Preserve constraints read by ASE; if none exist, apply `FixAtoms` to the bottom two layers. Replace uploaded constraints only when the user explicitly asks.
 4. Build and independently relax the gas-phase molecular/isomer reference.
-5. Read and enumerate the named sites supplied by ASE for that exact surface.
+5. For generated slabs, enumerate ASE's named sites for that exact surface. For uploaded slabs, discover indexed ontop, bridge, and threefold-hollow coordinates from top-layer atoms; allow explicit `--site-xy X Y` coordinates for expert override.
 6. Enumerate C-down/O-down for CO; enumerate 0/120/240° azimuths for larger intermediates.
 7. Calculate UMA single-point energies with the `oc20` task.
 8. Run constrained ASE LBFGS relaxation for the clean slab and every candidate.
@@ -62,6 +71,14 @@ Invoke:
 ```bash
 <python-with-ase-and-fairchem> scripts/run_local.py \
   --metal Fe --facet 110 --adsorbate CO --output /absolute/task/outputs/CO_Fe110
+```
+
+For an uploaded structure:
+
+```bash
+<python-with-ase-and-fairchem> scripts/run_local.py \
+  --structure /absolute/path/POSCAR --adsorbate CO \
+  --output /absolute/task/outputs/CO_uploaded
 ```
 
 Pass supported backend overrides after the launcher arguments, for example
@@ -79,6 +96,9 @@ Report runtime, candidate count, accepted/rejected count, rejection reasons,
 lowest accepted site/orientation, adsorption energy, convergence, and clickable
 links to `summary.json`, `candidates.csv`, `best_structure.extxyz`, and
 `energy_and_topviews.png`.
+For uploaded structures, also report the source filename, SHA-256 provenance,
+whether input constraints were preserved, estimated vacuum, discovered site
+count, and validation warnings from `summary.json`.
 
 Use the backend's visualization rule: one accepted value becomes a numerical
 energy card; multiple sites become a lowest-energy-per-site bar chart; multiple
@@ -91,7 +111,7 @@ thermodynamic corrections.
 
 Always label the result:
 
-> UMA prediction on ASE-generated structures; not a Catalysis-Hub DFT benchmark.
+> UMA prediction on an ASE-generated or user-supplied structure; not a Catalysis-Hub DFT benchmark.
 
 ASE reference-state support means the structure can be generated; it does not
 show that UMA is accurate for that element, magnetic state, or surface. Do not
@@ -99,6 +119,9 @@ present a high-symmetry site ranking as experimentally validated. Mention
 that finite site/orientation enumeration can miss lower-energy structures and
 that solvent, potential, defects, coverage variation, co-adsorbates, and
 transition states are outside this workflow.
+Automatic site discovery on uploaded reconstructed, stepped, porous, defective,
+or multicomponent slabs is a screening heuristic. Require visual inspection of
+the ASE-native top views before interpreting its ranking.
 
 For a strict DFT comparison, use the repository's separate Catalysis-Hub
 benchmark path only when a matched structure and consistent reference are

@@ -75,7 +75,7 @@ def contains_alias(text: str, alias: str) -> bool:
     return alias in text
 
 
-def parse_prompt(prompt: str) -> dict:
+def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
     original = prompt.replace("（", "(").replace("）", ")")
     text = prompt.lower().replace("（", "(").replace("）", ")")
     if contains_alias(text, "co2"):
@@ -106,24 +106,34 @@ def parse_prompt(prompt: str) -> dict:
         adsorbates.extend(("C", "CH", "CH2", "CH3"))
     if any(term in text for term in ("all noble", "all supported", "所有贵金属", "全部贵金属")):
         metals = list(DATASET_METALS)
-    if not metals:
+    if not metals and not uploaded_structure:
         metals = list(DATASET_METALS)
-    if not adsorbates: adsorbates = ["C", "CH", "CH2", "CH3"]
+    if not adsorbates:
+        if uploaded_structure:
+            raise ValueError("Name one supported adsorbate for the uploaded clean slab: CO, CHO/HCO, COH, CHOH, or CH2OH.")
+        adsorbates = ["C", "CH", "CH2", "CH3"]
     metals = [x for x in PREDICTION_METALS if x in metals]
     adsorbates = [x for x in SUPPORTED_ADSORBATES if x in set(adsorbates)]
     prediction_species = [x for x in adsorbates if x in PREDICTION_ADSORBATES]
     dataset_species = [x for x in adsorbates if x in DATASET_ADSORBATES]
+    if uploaded_structure and dataset_species:
+        raise ValueError("Uploaded-structure modelling currently supports CO, CHO/HCO, COH, CHOH, and CH2OH.")
     if dataset_species and not prediction_species:
         metals = [metal for metal in DATASET_METALS if metal in metals]
     if prediction_species and dataset_species:
         raise ValueError("A single job cannot mix database-backed and automatically modelled adsorbates yet; split it into two requests.")
-    if len(metals) != 1 and prediction_species:
+    if len(metals) != 1 and prediction_species and not uploaded_structure:
         raise ValueError("Automatic modelling currently runs one metal per job; submit separate requests for each metal.")
     crystal_structure = None
-    if prediction_species:
+    if uploaded_structure:
+        metals = []
+        crystal_structure = "uploaded"
+    elif prediction_species:
         crystal_structure = reference_states[atomic_numbers[metals[0]]]["symmetry"]
     facet_match = re.search(r"(?<!\d)(0001|10\s*[-−m]\s*10|111|110|100)(?!\d)", text)
-    if facet_match:
+    if uploaded_structure:
+        facet = "custom"
+    elif facet_match:
         facet = facet_match.group(1).replace(" ", "").replace("−", "-").replace("10-10", "10m10")
     elif crystal_structure == "bcc":
         facet = "110"
@@ -132,24 +142,29 @@ def parse_prompt(prompt: str) -> dict:
     else:
         facet = "111"
     allowed = {"fcc": {"111", "100", "110"}, "bcc": {"111", "100", "110"}, "hcp": {"0001", "10m10"}}
-    if prediction_species and facet not in allowed[crystal_structure]:
+    if prediction_species and not uploaded_structure and facet not in allowed[crystal_structure]:
         readable = ", ".join(sorted(x.replace("m", "-") for x in allowed[crystal_structure]))
         raise ValueError(f"Unsupported {crystal_structure} facet {facet}; available facets: {readable}.")
     if dataset_species and facet != "111":
         raise ValueError(f"The packaged Catalysis-Hub baseline supports only facet 111, not {facet}.")
-    mode = "ase_automatic_prediction" if prediction_species else "cathub_dataset_benchmark"
+    mode = ("ase_uploaded_prediction" if uploaded_structure else
+            "ase_automatic_prediction" if prediction_species else "cathub_dataset_benchmark")
     return {
         "metals": metals, "facet": facet, "adsorbates": adsorbates,
         "crystal_structure": crystal_structure,
         "mode": mode,
         "reference_dataset": None if prediction_species else "MamunHighT2019", "calculator": "uma-s-1p2",
         "task": "oc20", "calculations": ["single_point", "constrained_relaxation"],
-        "constraints": ("ASE FixAtoms on bottom 2 of 4 generated slab layers" if prediction_species
+        "uploaded_structure": str(Path(uploaded_structure).expanduser().resolve()) if uploaded_structure else None,
+        "constraints": ("Preserve uploaded constraints when available; otherwise ASE FixAtoms on bottom 2 layers" if uploaded_structure
+                        else "ASE FixAtoms on bottom 2 of 4 generated slab layers" if prediction_species
                         else "deposited FixAtoms (bottom 8 of 12 slab atoms)"),
         "optimizer": {"name": "LBFGS", "fmax_eV_per_A": 0.05, "max_steps": 100},
-        "site_enumeration": ("all ASE named high-symmetry sites available for the selected surface" if prediction_species else None),
+        "site_enumeration": ("automatic ontop/bridge/hollow coordinate discovery on the uploaded top layer" if uploaded_structure
+                             else "all ASE named high-symmetry sites available for the selected surface" if prediction_species else None),
         "orientation_enumeration": ("CO: C-down and O-down; larger intermediates: 0/120/240 degree azimuths" if prediction_species else None),
-        "scientific_label": ("UMA prediction on ASE-generated structures; no DFT reference" if prediction_species
+        "scientific_label": ("UMA prediction on a user-supplied clean slab; no DFT reference" if uploaded_structure
+                             else "UMA prediction on ASE-generated structures; no DFT reference" if prediction_species
                              else "Catalysis-Hub DFT benchmark"),
         "outputs": (["plan", "candidate_csv", "summary_json", "energy_visualization", "top_views", "initial_and_final_structures", "best_structure"]
                     if prediction_species else ["json", "csv", "metrics", "parity_plot"]),
@@ -159,35 +174,39 @@ def parse_prompt(prompt: str) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Multilingual natural-language UMA/CatHub agent")
     parser.add_argument("prompt", nargs="+", help="Natural-language calculation request")
+    parser.add_argument("--structure", type=Path, help="Uploaded clean slab (CIF, POSCAR/CONTCAR, XYZ, EXTXYZ, TRAJ, or another ASE-readable file)")
     parser.add_argument("--execute", action="store_true", help="Run after printing the validated plan")
     parser.add_argument("--yes", action="store_true", help="Skip interactive confirmation")
     args = parser.parse_args()
     prompt = " ".join(args.prompt)
     try:
-        plan = parse_prompt(prompt)
+        plan = parse_prompt(prompt, str(args.structure) if args.structure else None)
     except ValueError as error:
         print(f"REQUEST REJECTED: {error}", file=sys.stderr)
         raise SystemExit(2)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     job_name = f"nl_job_{stamp}"
-    payload = {"schema_version": 1, "original_prompt": prompt, "parser": "local_multilingual_rules_v1", **plan}
+    payload = {"schema_version": 2, "original_prompt": prompt, "parser": "local_multilingual_rules_v2", **plan}
     plan_path = ROOT / "results" / f"{job_name}_plan.json"
     plan_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     print(f"\nValidated plan saved to: {plan_path}")
     if not args.execute: return
     if not args.yes and input("Run this plan? [y/N] ").strip().lower() not in {"y", "yes", "是"}: return
-    if plan["mode"] == "ase_automatic_prediction":
+    if plan["mode"] in {"ase_automatic_prediction", "ase_uploaded_prediction"}:
         prediction_root = ROOT / "results" / job_name
-        commands = [[
-            sys.executable, str(ROOT / "predict_adsorption.py"),
-            "--metal", plan["metals"][0], "--facet", plan["facet"],
-            "--adsorbate", adsorbate,
-            "--output", str(prediction_root / adsorbate),
-        ] for adsorbate in plan["adsorbates"]]
+        commands = []
+        for adsorbate in plan["adsorbates"]:
+            command = [sys.executable, str(ROOT / "predict_adsorption.py")]
+            if plan["mode"] == "ase_uploaded_prediction":
+                command += ["--structure", plan["uploaded_structure"]]
+            else:
+                command += ["--metal", plan["metals"][0], "--facet", plan["facet"]]
+            command += ["--adsorbate", adsorbate, "--output", str(prediction_root / adsorbate)]
+            commands.append(command)
     else:
         command = [sys.executable, str(ROOT / "run_catbench_subset.py"), "--source", str(ROOT / "raw_data/Mamun_noble_C1_subset_adsorption.json"), "--benchmark-name", job_name, "--mlip-name", f"UMA-{job_name}", "--metals", *plan["metals"], "--adsorbates", *plan["adsorbates"]]
-    if plan["mode"] == "ase_automatic_prediction":
+    if plan["mode"] in {"ase_automatic_prediction", "ase_uploaded_prediction"}:
         for command in commands:
             subprocess.run(command, cwd=ROOT, check=True)
         if len(commands) > 1:
@@ -198,7 +217,7 @@ def main():
             ], cwd=ROOT, check=True)
     else:
         subprocess.run(command, cwd=ROOT, check=True)
-    if plan["mode"] == "ase_automatic_prediction":
+    if plan["mode"] in {"ase_automatic_prediction", "ase_uploaded_prediction"}:
         print(f"\nCalculation complete. Automatic prediction result: {ROOT / 'results' / job_name}")
     else:
         print(f"\nCalculation complete. Raw CatBench result: {ROOT / 'result' / f'UMA-{job_name}'}")
