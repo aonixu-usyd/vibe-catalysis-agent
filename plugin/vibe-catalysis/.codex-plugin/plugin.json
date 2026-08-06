@@ -20,11 +20,8 @@
     "websiteURL": "https://github.com/aonixu-usyd/vibe-catalysis-agent",
     "defaultPrompt": [
       "Calculate CO adsorption on Cu(111) and compare sites.",
-      "Use my uploaded POSCAR to calculate and plot CO adsorption.",
-      "Use active atoms 18, 24, and 31 in my uploaded COF CIF to screen CO adsorption sites.",
-      "Relax CHO on Fe(110) with the bottom layers fixed.",
-      "Compare CO and CHO adsorption and draw an energy profile."
-      ,"Calculate the CHE reaction energy from CO* to CHO* at 0 V vs SHE."
+      "Use my uploaded catalyst structure and selected active atoms to calculate and plot CO adsorption.",
+      "Compare the CHE reaction energies of CO* to CHO* and CO* to COH* at 0 V vs SHE."
     ],
     "brandColor": "#2563EB",
     "composerIcon": "./assets/logo.png",
