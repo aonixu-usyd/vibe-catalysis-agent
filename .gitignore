@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.env.*
+*.token
+result/
+raw_data/nl_job_*_adsorption.json
+raw_data/agent_integration_test_adsorption.json
+results/nl_job_*
+work/
