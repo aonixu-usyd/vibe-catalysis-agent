@@ -47,8 +47,25 @@ def offline_tests():
         assert plan["mode"] == "ase_automatic_prediction"
         assert plan["metals"] == [metal]
         assert plan["adsorbates"] == [adsorbate]
-    slab, fixed = build_slab("Cu", (2, 2, 4), 8.0, 2)
+    expanded_cases = [
+        ("计算CO在Ni(100)上的吸附能", "Ni", "fcc", "100"),
+        ("Calculate CO adsorption on Fe(110)", "Fe", "bcc", "110"),
+        ("计算CHO在Co(0001)上的吸附能", "Co", "hcp", "0001"),
+        ("Calculate CO on Mo(100)", "Mo", "bcc", "100"),
+        ("计算CO在Ru(10-10)上的吸附能", "Ru", "hcp", "10m10"),
+    ]
+    for prompt, metal, crystal, facet in expanded_cases:
+        plan = parse_prompt(prompt)
+        assert plan["metals"] == [metal], (prompt, plan["metals"])
+        assert plan["crystal_structure"] == crystal
+        assert plan["facet"] == facet
+    slab, fixed, metadata, sites = build_slab("Cu", "111", (2, 2, 4), 8.0, 2)
     assert len(slab) == 16 and len(fixed) == 8
+    assert metadata["crystal_structure"] == "fcc" and set(sites) == {"ontop", "bridge", "fcc", "hcp"}
+    fe, fe_fixed, fe_metadata, fe_sites = build_slab("Fe", "110", (2, 2, 4), 8.0, 2)
+    assert fe_metadata["crystal_structure"] == "bcc" and "hollow" in fe_sites and fe_fixed
+    co_slab, co_fixed, co_metadata, co_sites = build_slab("Co", "0001", (2, 2, 4), 8.0, 2)
+    assert co_metadata["crystal_structure"] == "hcp" and "fcc" in co_sites and co_fixed
     co, bonds = molecule_template("CO", "C", 0)
     assert co.get_chemical_symbols() == ["C", "O"] and bonds == [(0, 1)]
     oh_down, _ = molecule_template("CO", "O", 0)
@@ -57,7 +74,7 @@ def offline_tests():
     assert len(candidate) == 18 and len(ads_indices) == 2
     assert set(candidate.get_tags()[ads_indices]) == {2}
     assert gas_reference("CH2OH").pbc.tolist() == [False, False, False]
-    print(f"PASS: {len(CASES)} dataset parser cases, {len(auto_cases)} automatic parser cases, builder constraints/orientations, and 1 safety rejection")
+    print(f"PASS: {len(CASES)} dataset parser cases, {len(auto_cases) + len(expanded_cases)} automatic parser cases, fcc/bcc/hcp builders, constraints/orientations, and 1 safety rejection")
 
 
 def integration_test():

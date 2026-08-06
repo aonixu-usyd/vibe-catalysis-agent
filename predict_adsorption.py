@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build metal(111) adsorption candidates with ASE and evaluate them with UMA.
+"""Build elemental-metal adsorption candidates with ASE and evaluate with UMA.
 
 This is the prediction backend.  It deliberately stays separate from the
 CatHub-backed benchmark backend: the energies produced here are UMA predictions
@@ -19,17 +19,38 @@ from pathlib import Path
 
 import numpy as np
 from ase import Atoms
-from ase.build import add_adsorbate, fcc111
+from ase.build import (
+    add_adsorbate,
+    bcc100,
+    bcc110,
+    bcc111,
+    fcc100,
+    fcc110,
+    fcc111,
+    hcp0001,
+    hcp10m10,
+)
 from ase.constraints import FixAtoms
+from ase.data import atomic_numbers, reference_states
 from ase.io import write
 from ase.optimize import LBFGS
 from fairchem.core import FAIRChemCalculator, pretrained_mlip
 
 
 ROOT = Path(__file__).resolve().parent
-METALS = ("Cu", "Ag", "Au", "Pt", "Pd")
 ADSORBATES = ("CO", "CHO", "COH", "CHOH", "CH2OH")
-SITES = ("ontop", "bridge", "fcc", "hcp")
+CRYSTAL_STRUCTURES = ("fcc", "bcc", "hcp")
+NONMETALLIC_REFERENCE_ELEMENTS = {"Ne", "Ar", "Kr", "Xe", "Se", "Te"}
+SURFACE_BUILDERS = {
+    ("fcc", "111"): fcc111,
+    ("fcc", "100"): fcc100,
+    ("fcc", "110"): fcc110,
+    ("bcc", "100"): bcc100,
+    ("bcc", "110"): bcc110,
+    ("bcc", "111"): bcc111,
+    ("hcp", "0001"): hcp0001,
+    ("hcp", "10m10"): hcp10m10,
+}
 
 # Approximate, intentionally non-equilibrium starting geometries.  Atom 0 is
 # the default surface anchor.  Relaxation, not these coordinates, determines
@@ -99,8 +120,68 @@ def layer_indices(atoms: Atoms, tolerance: float = 0.25) -> list[list[int]]:
     return layers
 
 
-def build_slab(metal: str, size: tuple[int, int, int], vacuum: float, fixed_layers: int) -> tuple[Atoms, list[int]]:
-    slab = fcc111(metal, size=size, vacuum=vacuum, periodic=True)
+def normalize_facet(facet: str) -> str:
+    value = facet.lower().replace("−", "-").replace("_", "").replace(" ", "")
+    value = value.strip("()[]{}").replace(",", "")
+    if value in {"10-10", "1010", "10m10"}:
+        return "10m10"
+    if value in {"0001", "111", "100", "110"}:
+        return value
+    raise ValueError(f"Unsupported low-index facet: {facet}")
+
+
+def detect_crystal_structure(metal: str, override: str | None = None) -> tuple[str, dict]:
+    symbol = metal[0].upper() + metal[1:].lower()
+    if symbol not in atomic_numbers:
+        raise ValueError(f"Unknown element symbol: {metal}")
+    reference = reference_states[atomic_numbers[symbol]]
+    if not reference or reference.get("symmetry") not in CRYSTAL_STRUCTURES:
+        raise ValueError(f"ASE has no fcc/bcc/hcp reference state for elemental {symbol}")
+    if symbol in NONMETALLIC_REFERENCE_ELEMENTS:
+        raise ValueError(f"{symbol} has an ASE close-packed reference but is not treated as an elemental metal")
+    crystal = override or reference["symmetry"]
+    if crystal not in CRYSTAL_STRUCTURES:
+        raise ValueError(f"Unsupported crystal structure: {crystal}")
+    return crystal, dict(reference)
+
+
+def default_size(crystal: str, facet: str) -> tuple[int, int, int]:
+    return (3, 4, 4) if (crystal, facet) == ("hcp", "10m10") else (3, 3, 4)
+
+
+def build_slab(
+    metal: str,
+    facet: str,
+    size: tuple[int, int, int] | None,
+    vacuum: float,
+    fixed_layers: int,
+    crystal_structure: str | None = None,
+    lattice_a: float | None = None,
+    lattice_c: float | None = None,
+) -> tuple[Atoms, list[int], dict, list[str]]:
+    symbol = metal[0].upper() + metal[1:].lower()
+    crystal, reference = detect_crystal_structure(symbol, crystal_structure)
+    if crystal_structure and crystal_structure != reference["symmetry"] and lattice_a is None:
+        raise ValueError(
+            f"{symbol} reference state is {reference['symmetry']}; --crystal-structure {crystal_structure} "
+            "requires --lattice-a (and --lattice-c for hcp if needed)"
+        )
+    facet = normalize_facet(facet)
+    key = (crystal, facet)
+    if key not in SURFACE_BUILDERS:
+        available = ", ".join(f"{c}({f.replace('m', '-')})" for c, f in SURFACE_BUILDERS if c == crystal)
+        raise ValueError(f"Unsupported {crystal} facet {facet}; available surfaces: {available}")
+    resolved_size = tuple(size or default_size(crystal, facet))
+    if min(resolved_size) < 1:
+        raise ValueError("All slab size values must be positive")
+    if key == ("hcp", "10m10") and resolved_size[1] % 2:
+        raise ValueError("hcp(10-10) requires an even NY; use e.g. --size 3 4 4")
+    kwargs = {"size": resolved_size, "vacuum": vacuum, "periodic": True}
+    if lattice_a is not None:
+        kwargs["a"] = lattice_a
+    if crystal == "hcp" and lattice_c is not None:
+        kwargs["c"] = lattice_c
+    slab = SURFACE_BUILDERS[key](symbol, **kwargs)
     slab.pbc = (True, True, False)
     layers = layer_indices(slab)
     if fixed_layers < 0 or fixed_layers >= len(layers):
@@ -111,7 +192,19 @@ def build_slab(metal: str, size: tuple[int, int, int], vacuum: float, fixed_laye
     tags = np.ones(len(slab), dtype=int)
     tags[fixed] = 0
     slab.set_tags(tags)
-    return slab, fixed
+    sites = sorted(slab.info.get("adsorbate_info", {}).get("sites", {}))
+    if not sites:
+        raise RuntimeError(f"ASE returned no named adsorption sites for {crystal}({facet})")
+    metadata = {
+        "element": symbol,
+        "crystal_structure": crystal,
+        "facet": facet,
+        "size": list(resolved_size),
+        "ase_reference_state": reference,
+        "lattice_a_override_A": lattice_a,
+        "lattice_c_override_A": lattice_c,
+    }
+    return slab, fixed, metadata, sites
 
 
 def build_candidate(slab: Atoms, species: str, site: str, anchor: str, azimuth: int, height: float) -> tuple[Atoms, list[int], list[tuple[int, int]]]:
@@ -177,13 +270,16 @@ def write_csv(path: Path, rows: list[CandidateResult]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="ASE automatic adsorption modelling with FAIR-Chem UMA")
-    parser.add_argument("--metal", choices=METALS, required=True)
-    parser.add_argument("--facet", default="111", choices=("111",))
+    parser.add_argument("--metal", required=True, help="Element symbol with an ASE fcc/bcc/hcp reference state")
+    parser.add_argument("--facet", default="111", help="111/100/110 for cubic; 0001/10-10 for hcp")
+    parser.add_argument("--crystal-structure", choices=CRYSTAL_STRUCTURES)
+    parser.add_argument("--lattice-a", type=float)
+    parser.add_argument("--lattice-c", type=float)
     parser.add_argument("--adsorbate", choices=ADSORBATES, required=True)
-    parser.add_argument("--sites", nargs="+", choices=SITES, default=list(SITES))
+    parser.add_argument("--sites", nargs="+", help="ASE site names; default is every site available for the surface")
     parser.add_argument("--anchors", nargs="+", choices=("C", "O"))
     parser.add_argument("--azimuths", nargs="+", type=int)
-    parser.add_argument("--size", nargs=3, type=int, metavar=("NX", "NY", "NLAYERS"), default=(3, 3, 4))
+    parser.add_argument("--size", nargs=3, type=int, metavar=("NX", "NY", "NLAYERS"))
     parser.add_argument("--vacuum", type=float, default=10.0)
     parser.add_argument("--fixed-layers", type=int, default=2)
     parser.add_argument("--height", type=float, default=1.85)
@@ -195,17 +291,31 @@ def main() -> None:
     parser.add_argument("--single-point-only", action="store_true")
     args = parser.parse_args()
 
+    args.metal = args.metal[0].upper() + args.metal[1:].lower()
+    args.facet = normalize_facet(args.facet)
     anchors = args.anchors or (["C", "O"] if args.adsorbate == "CO" else ["C"])
     azimuths = args.azimuths or ([0] if args.adsorbate == "CO" else [0, 120, 240])
     if args.adsorbate != "CO" and "O" in anchors:
         raise ValueError("O anchoring is currently validated only for CO; use C anchoring for this intermediate")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    output = (args.output or ROOT / "results" / f"prediction_{args.adsorbate}_{args.metal}{args.facet}_{stamp}").resolve()
+    output = (args.output or ROOT / "results" / f"prediction_{args.adsorbate}_{args.metal}{args.facet.replace('m', '-')}_{stamp}").resolve()
+    slab, fixed, surface_metadata, available_sites = build_slab(
+        args.metal, args.facet, tuple(args.size) if args.size else None,
+        args.vacuum, args.fixed_layers, args.crystal_structure,
+        args.lattice_a, args.lattice_c,
+    )
+    sites = args.sites or available_sites
+    unknown_sites = sorted(set(sites) - set(available_sites))
+    if unknown_sites:
+        raise ValueError(
+            f"Unknown sites for {surface_metadata['crystal_structure']}({args.facet}): {unknown_sites}; "
+            f"available sites: {available_sites}"
+        )
     structures = output / "structures"
     structures.mkdir(parents=True, exist_ok=False)
-
     plan = vars(args).copy()
     plan.update({"output": str(output), "anchors": anchors, "azimuths": azimuths,
+                 "sites": sites, "available_sites": available_sites, "surface": surface_metadata,
                  "energy_definition": "E_ads = E_relaxed(slab+X) - E_relaxed(slab) - E_relaxed(X_gas)",
                  "provenance": "ASE-generated prediction; no DFT reference", "created_utc": stamp})
     (output / "plan.json").write_text(json.dumps(plan, indent=2))
@@ -214,7 +324,6 @@ def main() -> None:
     predictor = pretrained_mlip.get_predict_unit(args.model, device=args.device)
     calc = FAIRChemCalculator(predictor, task_name="oc20")
 
-    slab, fixed = build_slab(args.metal, tuple(args.size), args.vacuum, args.fixed_layers)
     slab_initial = slab.copy()
     attach(calc, slab)
     slab_sp = float(slab.get_potential_energy())
@@ -237,7 +346,7 @@ def main() -> None:
     write(output / "gas_relaxed.extxyz", gas)
 
     rows: list[CandidateResult] = []
-    for site in args.sites:
+    for site in sites:
         for anchor in anchors:
             for azimuth in azimuths:
                 name = safe_name(f"{site}_{anchor}down_rot{azimuth}")
@@ -273,7 +382,9 @@ def main() -> None:
     best = min(accepted, key=lambda row: row.relaxed_adsorption_eV) if accepted else None
     summary = {
         "status": "complete" if best else "no_accepted_candidate",
-        "metal": args.metal, "facet": args.facet, "adsorbate": args.adsorbate,
+        "metal": args.metal, "crystal_structure": surface_metadata["crystal_structure"],
+        "facet": args.facet, "slab_size": surface_metadata["size"], "adsorbate": args.adsorbate,
+        "available_sites": available_sites, "evaluated_sites": sites,
         "n_candidates": len(rows), "n_accepted": len(accepted),
         "fixed_layers": args.fixed_layers, "fixed_atom_indices": fixed,
         "clean_slab": {"single_point_eV": slab_sp, "relaxed_eV": slab_relaxed, "steps": slab_steps, "converged": slab_converged},

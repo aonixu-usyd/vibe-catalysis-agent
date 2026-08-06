@@ -31,8 +31,11 @@ It has two deliberately separated modes:
 - FAIR-Chem `uma-s-1p2` with the `oc20` task.
 - Offline parser tests and a real Cu(111)/H integration test.
 - A 31-case Cu/Ag/Au/Pt/Pd benchmark and parity plot.
-- Automatic fcc(111) slab construction for Cu/Ag/Au/Pt/Pd.
-- Automatic `ontop`, `bridge`, `fcc`, and `hcp` enumeration.
+- Automatic ASE reference-state detection for elemental fcc/bcc/hcp metals.
+- Common low-index surfaces: fcc(111/100/110), bcc(111/100/110), and
+  hcp(0001/10-10).
+- Surface-specific ASE high-symmetry sites; site names are never copied from an
+  incompatible surface.
 - CO C-down/O-down enumeration; three azimuths for larger C/O/H intermediates.
 - Bottom-layer constraints, geometry checks, candidate table, and best structure.
 
@@ -71,7 +74,7 @@ python test_agent.py
 Expected output:
 
 ```text
-PASS: 6 dataset parser cases, 5 automatic parser cases, builder constraints/orientations, and 1 safety rejection
+PASS: 6 dataset parser cases, 10 automatic parser cases, fcc/bcc/hcp builders, constraints/orientations, and 1 safety rejection
 SKIP: UMA integration test (run with --integration)
 ```
 
@@ -130,14 +133,39 @@ Build, relax, screen, and rank all candidates:
 python vibe_agent.py "计算CO在Cu(111)上的吸附能" --execute --yes
 ```
 
+The crystal structure and a sensible default facet are inferred from ASE when
+the facet is omitted: fcc→(111), bcc→(110), and hcp→(0001).
+
+```bash
+python vibe_agent.py "Calculate CO adsorption on Ni(100)" --execute --yes
+python vibe_agent.py "计算CO在Fe(110)上的吸附能" --execute --yes
+python vibe_agent.py "计算CHO在Co(0001)上的吸附能" --execute --yes
+python vibe_agent.py "计算CO在Ru(10-10)上的吸附能" --execute --yes
+```
+
 The automatic backend can also be called directly for full control:
 
 ```bash
 python predict_adsorption.py \
-  --metal Cu --facet 111 --adsorbate CO \
-  --size 3 3 4 --fixed-layers 2 \
-  --sites ontop bridge fcc hcp
+  --metal Fe --facet 110 --adsorbate CO \
+  --size 3 3 4 --fixed-layers 2
 ```
+
+If `--sites` is omitted, every named ASE site available for that surface is
+used. Examples include:
+
+| Crystal/surface | Named ASE sites used by default |
+|---|---|
+| fcc(111), hcp(0001) | ontop, bridge, fcc, hcp |
+| fcc(100), bcc(100) | ontop, bridge, hollow |
+| fcc(110), bcc(110) | ontop, longbridge, shortbridge, hollow |
+| bcc(111) | ontop, hollow |
+| hcp(10-10) | ontop |
+
+Element symbols are accepted when ASE lists an elemental fcc/bcc/hcp reference
+state. Examples include Ni/Rh/Ir (fcc), Fe/V/Cr/Mo/W (bcc), and
+Co/Ru/Ti/Zr/Hf (hcp). `--crystal-structure` and lattice constants can override
+the reference phase for an intentionally metastable structure.
 
 Outputs are written to a new results directory:
 
@@ -223,10 +251,15 @@ appropriate when using the results.
 
 - The packaged DFT reference subset does not contain CO/CHO/COH/CHOH/CH2OH;
   those species currently use automatic prediction mode.
-- Unsupported facets are rejected rather than silently reconstructed.
-- The automatic builder currently supports fcc(111), one adsorbate per cell,
-  standard high-symmetry sites, and vacuum calculations. It does not include
-  solvent, electrode potential, co-adsorbates, defects, or transition states.
+- Unsupported crystal/facet combinations are rejected rather than silently
+  reconstructed. The builder covers fcc(111/100/110), bcc(111/100/110), and
+  hcp(0001/10-10), not arbitrary Miller indices.
+- ASE reference-state availability means the geometry can be constructed; it
+  does not establish that UMA is accurate for that element, magnetic state, or
+  surface. Magnetic ordering and spin-state benchmarking are not included.
+- The automatic builder models one adsorbate per cell, named ASE
+  high-symmetry sites, and vacuum calculations. It does not include solvent,
+  electrode potential, co-adsorbates, defects, or transition states.
 - Polyatomic site/orientation enumeration is finite and may miss a lower-energy
   configuration. Geometry checks flag desorption, penetration, bond breaking,
   and large surface reconstruction but do not prove chemical correctness.
