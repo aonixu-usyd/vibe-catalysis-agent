@@ -13,8 +13,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from ase.data import covalent_radii
 from ase.io import read
+from ase.visualize.plot import plot_atoms
 
 
 INK = "#172033"
@@ -51,38 +51,17 @@ def structure_for(job: dict, row: dict):
     return read(job["path"] / "structures" / f"{row['candidate']}_final.extxyz")
 
 
-def atom_color(symbol: str, is_adsorbate: bool) -> str:
-    if symbol == "O":
-        return RED
-    if symbol == "C":
-        return "#202938"
-    if symbol == "H":
-        return "#FFFFFF"
-    return "#AAB4C3" if not is_adsorbate else TEAL
-
-
 def draw_top_view(ax, atoms, title: str) -> None:
-    tags = atoms.get_tags()
-    xy = atoms.positions[:, :2]
-    order = np.argsort(tags)  # substrate first, adsorbate on top
-    for index in order:
-        ads = bool(tags[index] == 2)
-        radius = covalent_radii[atoms.numbers[index]]
-        size = (130 if ads else 72) * max(radius, 0.55) ** 1.25
-        ax.scatter(
-            xy[index, 0], xy[index, 1], s=size,
-            c=atom_color(atoms[index].symbol, ads), edgecolors="#FFFFFF" if not ads else INK,
-            linewidths=0.7 if not ads else 1.1, zorder=3 if ads else 2,
-        )
-    ax.set_aspect("equal")
-    pad = max(np.ptp(xy[:, 0]), np.ptp(xy[:, 1])) * 0.08 + 0.35
-    ax.set_xlim(xy[:, 0].min() - pad, xy[:, 0].max() + pad)
-    ax.set_ylim(xy[:, 1].min() - pad, xy[:, 1].max() + pad)
-    ax.set_xticks([])
-    ax.set_yticks([])
+    # Use ASE's own renderer and standard element colours/radii.  With no
+    # rotation the view is along +z, i.e. the slab top view.
+    plot_atoms(
+        atoms,
+        ax=ax,
+        rotation="0x,0y,0z",
+        show_unit_cell=1,
+        radii=0.72,
+    )
     ax.set_title(title, fontsize=10, color=INK, pad=8, weight="bold")
-    for spine in ax.spines.values():
-        spine.set_visible(False)
     ax.set_facecolor(PAPER)
 
 

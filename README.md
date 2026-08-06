@@ -38,7 +38,8 @@ It has two deliberately separated modes:
   incompatible surface.
 - CO C-down/O-down enumeration; three azimuths for larger C/O/H intermediates.
 - Bottom-layer constraints, geometry checks, candidate table, and best structure.
-- Automatic publication-style energy graphics with relaxed-structure top views.
+- Automatic publication-style energy graphics with ASE-native relaxed-structure
+  top views, standard element colours/radii, and the periodic unit cell.
 
 ## Requirements
 
@@ -176,7 +177,7 @@ Outputs are written to a new results directory:
 - `structures/*_initial.extxyz` and `*_final.extxyz`;
 - `best_structure.extxyz`;
 - `energy_and_topviews.png`: a single-energy card or site-comparison bar chart,
-  plus top views of the selected relaxed structures;
+  plus ASE-native top views of the selected relaxed structures;
 - `visualization.json`: plotted values, structures, and visualization mode;
 - ASE optimizer trajectories and logs.
 
