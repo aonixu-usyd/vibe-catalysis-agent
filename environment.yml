@@ -12,3 +12,4 @@ dependencies:
       - fairchem-core==2.21.0
       - huggingface-hub
       - matplotlib
+      - scipy
