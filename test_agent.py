@@ -68,6 +68,7 @@ def offline_tests():
         ("计算CHO在Co(0001)上的吸附能", "Co", "hcp", "0001"),
         ("Calculate CO on Mo(100)", "Mo", "bcc", "100"),
         ("计算CO在Ru(10-10)上的吸附能", "Ru", "hcp", "10m10"),
+        ("Calculate NH2 adsorption on Pt(211)", "Pt", "fcc", "211"),
     ]
     for prompt, metal, crystal, facet in expanded_cases:
         plan = parse_prompt(prompt)
@@ -103,7 +104,13 @@ def offline_tests():
     co, bonds = molecule_template("CO", "C", 0)
     assert co.get_chemical_symbols() == ["C", "O"] and bonds == [(0, 1)]
     oh_down, _ = molecule_template("CO", "O", 0)
-    assert oh_down.get_chemical_symbols() == ["O", "C"]
+    assert oh_down.get_chemical_symbols() == ["C", "O"] and oh_down.positions[0, 2] > 0
+    pt211, pt211_fixed, pt211_metadata, pt211_sites = build_slab("Pt", "211", (1, 1, 4), 8.0, 2)
+    assert pt211_metadata["general_miller_builder"] and pt211_metadata["facet"] == "211"
+    assert pt211_fixed and any(name.startswith("ontop") for name in pt211_sites)
+    for species in ("N", "N2", "NH", "NH2", "NH3"):
+        atoms, _ = molecule_template(species, "N", 0)
+        assert atoms[0].symbol == "N"
     candidate, ads_indices, _ = build_candidate(slab, "CO", "ontop", "C", 0, 1.85)
     assert len(candidate) == 18 and len(ads_indices) == 2
     assert set(candidate.get_tags()[ads_indices]) == {2}

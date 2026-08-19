@@ -22,6 +22,7 @@ import numpy as np
 from ase import Atoms
 from ase.build import (
     add_adsorbate,
+    bulk,
     bcc100,
     bcc110,
     bcc111,
@@ -30,6 +31,8 @@ from ase.build import (
     fcc111,
     hcp0001,
     hcp10m10,
+    molecule,
+    surface,
 )
 from ase.constraints import FixAtoms
 from ase.data import atomic_numbers, reference_states
@@ -39,7 +42,6 @@ from fairchem.core import FAIRChemCalculator, pretrained_mlip
 
 
 ROOT = Path(__file__).resolve().parent
-ADSORBATES = ("CO", "CHO", "COH", "CHOH", "CH2OH")
 CRYSTAL_STRUCTURES = ("fcc", "bcc", "hcp")
 NONMETALLIC_REFERENCE_ELEMENTS = {"Ne", "Ar", "Kr", "Xe", "Se", "Te"}
 SURFACE_BUILDERS = {
@@ -62,6 +64,11 @@ ADSORBATE_TEMPLATES = {
     "COH": ("COH", [(0.0, 0.0, 0.0), (0.0, 0.0, 1.25), (0.82, 0.0, 1.78)], [(0, 1), (1, 2)]),
     "CHOH": ("COH2", [(0.0, 0.0, 0.0), (0.0, 0.0, 1.35), (0.92, 0.0, 0.30), (-0.80, 0.0, 1.90)], [(0, 1), (0, 2), (1, 3)]),
     "CH2OH": ("COH3", [(0.0, 0.0, 0.0), (0.0, 0.0, 1.40), (0.92, 0.0, 0.30), (-0.46, 0.80, 0.30), (-0.78, 0.0, 1.96)], [(0, 1), (0, 2), (0, 3), (1, 4)]),
+    "N": ("N", [(0.0, 0.0, 0.0)], []),
+    "N2": ("N2", [(0.0, 0.0, 0.0), (0.0, 0.0, 1.10)], [(0, 1)]),
+    "NH": ("NH", [(0.0, 0.0, 0.0), (0.0, 0.0, 1.04)], [(0, 1)]),
+    "NH2": ("NH2", [(0.0, 0.0, 0.0), (0.81, 0.0, 0.65), (-0.81, 0.0, 0.65)], [(0, 1), (0, 2)]),
+    "NH3": ("NH3", [(0.0, 0.0, 0.0), (0.94, 0.0, 0.36), (-0.47, 0.81, 0.36), (-0.47, -0.81, 0.36)], [(0, 1), (0, 2), (0, 3)]),
 }
 
 
@@ -84,13 +91,50 @@ class CandidateResult:
     error: str
 
 
-def molecule_template(species: str, anchor: str = "C", azimuth_deg: int = 0) -> tuple[Atoms, list[tuple[int, int]]]:
-    formula, positions, bonds = ADSORBATE_TEMPLATES[species]
-    atoms = Atoms(formula, positions=positions)
+def infer_bonds(atoms: Atoms, scale: float = 1.25) -> list[tuple[int, int]]:
+    from ase.data import covalent_radii
+    return [(i, j) for i in range(len(atoms)) for j in range(i + 1, len(atoms))
+            if atoms.get_distance(i, j) <= scale * (covalent_radii[atoms.numbers[i]] + covalent_radii[atoms.numbers[j]])]
+
+
+def read_adsorbate(species: str | None, adsorbate_file: Path | None = None) -> tuple[Atoms, list[tuple[int, int]]]:
+    if adsorbate_file:
+        path = adsorbate_file.expanduser().resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"Adsorbate structure not found: {path}")
+        atoms = read(path, index=-1)
+        atoms.pbc = False
+        atoms.set_cell([0.0, 0.0, 0.0])
+        atoms.set_constraint()
+        return atoms, infer_bonds(atoms)
+    if species in ADSORBATE_TEMPLATES:
+        formula, positions, bonds = ADSORBATE_TEMPLATES[species]
+        return Atoms(formula, positions=positions), list(bonds)
+    try:
+        atoms = molecule(species)
+    except Exception as exc:
+        raise ValueError(f"ASE cannot build {species!r}; provide --adsorbate-file") from exc
+    return atoms, infer_bonds(atoms)
+
+
+def molecule_template(species: str | None, anchor: str | None = None, azimuth_deg: int = 0,
+                      adsorbate_file: Path | None = None, anchor_index: int | None = None) -> tuple[Atoms, list[tuple[int, int]]]:
+    atoms, bonds = read_adsorbate(species, adsorbate_file)
+    if anchor_index is None:
+        if anchor:
+            matches = [i for i, symbol in enumerate(atoms.get_chemical_symbols()) if symbol == anchor]
+            if not matches:
+                raise ValueError(f"No {anchor} atom in adsorbate")
+            anchor_index = matches[0]
+        else:
+            anchor_index = 0
+    if not 0 <= anchor_index < len(atoms):
+        raise ValueError(f"Anchor index {anchor_index} outside 0..{len(atoms)-1}")
     if species == "CO" and anchor == "O":
-        atoms.positions[:] = [(0.0, 0.0, 0.0), (0.0, 0.0, -1.16)]
-        atoms = atoms[[1, 0]]  # anchor atom remains index 0; symbols become O,C
-        bonds = [(0, 1)]
+        anchor_index = 1
+    atoms.positions[:] -= atoms.positions[anchor_index]
+    if species == "CO" and anchor == "O":
+        atoms.positions[:, 2] *= -1.0
     theta = math.radians(azimuth_deg)
     rotation = np.array([[math.cos(theta), -math.sin(theta), 0.0],
                          [math.sin(theta), math.cos(theta), 0.0],
@@ -100,10 +144,10 @@ def molecule_template(species: str, anchor: str = "C", azimuth_deg: int = 0) -> 
     return atoms, bonds
 
 
-def gas_reference(species: str) -> Atoms:
+def gas_reference(species: str | None, adsorbate_file: Path | None = None) -> Atoms:
     # A gas reference uses the same molecular isomer and internal connectivity,
     # centred in a non-periodic box.  It is relaxed independently with UMA.
-    atoms, _ = molecule_template(species, "C", 0)
+    atoms, _ = read_adsorbate(species, adsorbate_file)
     atoms.center(vacuum=6.0)
     atoms.pbc = False
     atoms.set_constraint()
@@ -134,9 +178,18 @@ def normalize_facet(facet: str) -> str:
     value = value.strip("()[]{}").replace(",", "")
     if value in {"10-10", "1010", "10m10"}:
         return "10m10"
-    if value in {"0001", "111", "100", "110"}:
+    if value in {"0001", "111", "100", "110"} or re.fullmatch(r"[0-9]{3}", value):
         return value
-    raise ValueError(f"Unsupported low-index facet: {facet}")
+    raise ValueError(f"Unsupported Miller index: {facet}; use three-index cubic notation such as 211")
+
+
+def miller_tuple(facet: str) -> tuple[int, int, int]:
+    if not re.fullmatch(r"[0-9]{3}", facet):
+        raise ValueError(f"General surface builder requires a three-index Miller value, got {facet}")
+    value = tuple(int(char) for char in facet)
+    if value == (0, 0, 0):
+        raise ValueError("Miller index cannot be (000)")
+    return value
 
 
 def detect_crystal_structure(metal: str, override: str | None = None) -> tuple[str, dict]:
@@ -177,20 +230,24 @@ def build_slab(
         )
     facet = normalize_facet(facet)
     key = (crystal, facet)
-    if key not in SURFACE_BUILDERS:
-        available = ", ".join(f"{c}({f.replace('m', '-')})" for c, f in SURFACE_BUILDERS if c == crystal)
-        raise ValueError(f"Unsupported {crystal} facet {facet}; available surfaces: {available}")
     resolved_size = tuple(size or default_size(crystal, facet))
     if min(resolved_size) < 1:
         raise ValueError("All slab size values must be positive")
     if key == ("hcp", "10m10") and resolved_size[1] % 2:
         raise ValueError("hcp(10-10) requires an even NY; use e.g. --size 3 4 4")
-    kwargs = {"size": resolved_size, "vacuum": vacuum, "periodic": True}
-    if lattice_a is not None:
-        kwargs["a"] = lattice_a
-    if crystal == "hcp" and lattice_c is not None:
-        kwargs["c"] = lattice_c
-    slab = SURFACE_BUILDERS[key](symbol, **kwargs)
+    if key in SURFACE_BUILDERS:
+        kwargs = {"size": resolved_size, "vacuum": vacuum, "periodic": True}
+        if lattice_a is not None: kwargs["a"] = lattice_a
+        if crystal == "hcp" and lattice_c is not None: kwargs["c"] = lattice_c
+        slab = SURFACE_BUILDERS[key](symbol, **kwargs)
+        general_miller = False
+    else:
+        if crystal not in {"fcc", "bcc"}:
+            raise ValueError("Arbitrary Miller generation currently supports cubic fcc/bcc crystals; upload other prepared surfaces")
+        unit = bulk(symbol, crystalstructure=crystal, a=lattice_a, cubic=True)
+        slab = surface(unit, miller_tuple(facet), resolved_size[2], vacuum=vacuum, periodic=True)
+        slab = slab.repeat((resolved_size[0], resolved_size[1], 1))
+        general_miller = True
     slab.pbc = (True, True, False)
     layers = layer_indices(slab)
     if fixed_layers < 0 or fixed_layers >= len(layers):
@@ -203,7 +260,7 @@ def build_slab(
     slab.set_tags(tags)
     sites = sorted(slab.info.get("adsorbate_info", {}).get("sites", {}))
     if not sites:
-        raise RuntimeError(f"ASE returned no named adsorption sites for {crystal}({facet})")
+        sites = discover_custom_sites(slab, ["ontop", "bridge", "hollow"], 0.6, 8)
     metadata = {
         "element": symbol,
         "crystal_structure": crystal,
@@ -212,6 +269,7 @@ def build_slab(
         "ase_reference_state": reference,
         "lattice_a_override_A": lattice_a,
         "lattice_c_override_A": lattice_c,
+        "general_miller_builder": general_miller,
     }
     return slab, fixed, metadata, sites
 
@@ -361,11 +419,15 @@ def load_custom_slab(
     return slab, fixed, metadata, sites
 
 
-def build_candidate(slab: Atoms, species: str, site: str | tuple[float, float], anchor: str, azimuth: int, height: float) -> tuple[Atoms, list[int], list[tuple[int, int]]]:
+def build_candidate(slab: Atoms, species: str | None, site: str | tuple[float, float], anchor: str | None,
+                    azimuth: int, height: float, adsorbate_file: Path | None = None,
+                    anchor_index: int | None = None) -> tuple[Atoms, list[int], list[tuple[int, int]]]:
     candidate = slab.copy()
-    adsorbate, bonds = molecule_template(species, anchor, azimuth)
+    adsorbate, bonds = molecule_template(species, anchor, azimuth, adsorbate_file, anchor_index)
     first = len(candidate)
-    add_adsorbate(candidate, adsorbate, height=height, position=site, mol_index=0)
+    resolved_anchor = anchor_index or 0
+    if species == "CO" and anchor == "O" and anchor_index is None: resolved_anchor = 1
+    add_adsorbate(candidate, adsorbate, height=height, position=site, mol_index=resolved_anchor)
     ads_indices = list(range(first, len(candidate)))
     tags = candidate.get_tags()
     tags[ads_indices] = 2
@@ -431,14 +493,17 @@ def main() -> None:
     parser.add_argument("--crystal-structure", choices=CRYSTAL_STRUCTURES)
     parser.add_argument("--lattice-a", type=float)
     parser.add_argument("--lattice-c", type=float)
-    parser.add_argument("--adsorbate", choices=ADSORBATES, required=True)
+    adsorbate_source = parser.add_mutually_exclusive_group(required=True)
+    adsorbate_source.add_argument("--adsorbate", help="ASE molecule name or built-in intermediate")
+    adsorbate_source.add_argument("--adsorbate-file", type=Path, help="Any ASE-readable isolated intermediate")
     parser.add_argument("--sites", nargs="+", help="ASE site names; default is every site available for the surface")
     parser.add_argument("--site-types", nargs="+", choices=("ontop", "bridge", "hollow"), default=["ontop", "bridge", "hollow"], help="Site types discovered on an uploaded slab")
     parser.add_argument("--site-xy", nargs=2, type=float, action="append", metavar=("X", "Y"), help="Explicit Cartesian adsorption coordinate; repeat for multiple sites")
     parser.add_argument("--active-atom-indices", nargs="+", type=int, help="Zero-based catalyst atom indices used to construct ontop/bridge/hollow sites; useful for COF/MOF/oxide surfaces")
     parser.add_argument("--top-layer-tolerance", type=float, default=0.6)
     parser.add_argument("--max-sites-per-type", type=int, default=6)
-    parser.add_argument("--anchors", nargs="+", choices=("C", "O"))
+    parser.add_argument("--anchors", nargs="+", help="Element symbols used as anchors")
+    parser.add_argument("--anchor-indices", nargs="+", type=int, help="Zero-based adsorbate anchor indices")
     parser.add_argument("--azimuths", nargs="+", type=int)
     parser.add_argument("--size", nargs=3, type=int, metavar=("NX", "NY", "NLAYERS"))
     parser.add_argument("--vacuum", type=float, default=10.0)
@@ -458,13 +523,15 @@ def main() -> None:
         args.facet = normalize_facet(args.facet or "111")
     elif args.facet:
         raise ValueError("--facet is for ASE-generated elemental surfaces; omit it with --structure")
-    anchors = args.anchors or (["C", "O"] if args.adsorbate == "CO" else ["C"])
+    species_label = args.adsorbate or args.adsorbate_file.stem
+    anchors = args.anchors or (["C", "O"] if args.adsorbate == "CO" and not args.anchor_indices else [None])
+    anchor_indices = args.anchor_indices or [None]
+    if args.anchors and args.anchor_indices:
+        raise ValueError("Use either --anchors or --anchor-indices")
     azimuths = args.azimuths or ([0] if args.adsorbate == "CO" else [0, 120, 240])
-    if args.adsorbate != "CO" and "O" in anchors:
-        raise ValueError("O anchoring is currently validated only for CO; use C anchoring for this intermediate")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     source_label = f"{args.metal}{args.facet.replace('m', '-')}" if args.metal else safe_name(args.structure.stem)
-    output = (args.output or ROOT / "results" / f"prediction_{args.adsorbate}_{source_label}_{stamp}").resolve()
+    output = (args.output or ROOT / "results" / f"prediction_{safe_name(species_label)}_{source_label}_{stamp}").resolve()
     if args.structure:
         slab, fixed, surface_metadata, custom_sites = load_custom_slab(
             args.structure, args.fixed_layers, not args.replace_constraints,
@@ -477,13 +544,14 @@ def main() -> None:
         sites = args.sites or available_sites
         site_positions: dict[str, str | tuple[float, float]] = custom_sites
     else:
-        slab, fixed, surface_metadata, available_sites = build_slab(
+        slab, fixed, surface_metadata, generated_sites = build_slab(
             args.metal, args.facet, tuple(args.size) if args.size else None,
             args.vacuum, args.fixed_layers, args.crystal_structure,
             args.lattice_a, args.lattice_c,
         )
+        available_sites = list(generated_sites)
         sites = args.sites or available_sites
-        site_positions = {site: site for site in available_sites}
+        site_positions = generated_sites if isinstance(generated_sites, dict) else {site: site for site in available_sites}
     unknown_sites = sorted(set(sites) - set(available_sites))
     if unknown_sites:
         raise ValueError(
@@ -494,6 +562,7 @@ def main() -> None:
     structures.mkdir(parents=True, exist_ok=False)
     plan = vars(args).copy()
     plan["structure"] = str(args.structure.resolve()) if args.structure else None
+    plan["adsorbate_file"] = str(args.adsorbate_file.resolve()) if args.adsorbate_file else None
     plan.update({"output": str(output), "anchors": anchors, "azimuths": azimuths,
                  "sites": sites, "available_sites": available_sites, "surface": surface_metadata,
                  "energy_definition": "E_ads = E_relaxed(slab+X) - E_relaxed(slab) - E_relaxed(X_gas)",
@@ -514,7 +583,7 @@ def main() -> None:
     write(output / "clean_slab_initial.extxyz", slab_initial)
     write(output / "clean_slab_relaxed.extxyz", slab)
 
-    gas = gas_reference(args.adsorbate)
+    gas = gas_reference(args.adsorbate, args.adsorbate_file)
     gas_initial = gas.copy()
     attach(calc, gas)
     gas_sp = float(gas.get_potential_energy())
@@ -540,11 +609,15 @@ def main() -> None:
 
     rows: list[CandidateResult] = []
     for site in sites:
-        for anchor in anchors:
+        placement_anchors = ([(anchor, None) for anchor in anchors]
+                             if args.anchors or args.adsorbate == "CO"
+                             else [(None, index) for index in anchor_indices])
+        for anchor, anchor_index in placement_anchors:
             for azimuth in azimuths:
-                name = safe_name(f"{site}_{anchor}down_rot{azimuth}")
+                anchor_label = anchor if anchor is not None else f"atom{anchor_index or 0}"
+                name = safe_name(f"{site}_{anchor_label}down_rot{azimuth}")
                 print(f"Running {name} ...")
-                initial, ads_indices, bonds = build_candidate(slab.copy(), args.adsorbate, site_positions[site], anchor, azimuth, args.height)
+                initial, ads_indices, bonds = build_candidate(slab.copy(), args.adsorbate, site_positions[site], anchor, azimuth, args.height, args.adsorbate_file, anchor_index)
                 final = initial.copy()
                 attach(calc, final)
                 try:
@@ -566,7 +639,7 @@ def main() -> None:
                     error = f"{type(exc).__name__}: {exc}"
                 write(structures / f"{name}_initial.extxyz", initial)
                 write(structures / f"{name}_final.extxyz", final)
-                rows.append(CandidateResult(name, site, anchor, azimuth, total_sp, ads_sp,
+                rows.append(CandidateResult(name, site, anchor_label, azimuth, total_sp, ads_sp,
                                             total_relaxed, ads_relaxed, steps, converged, status,
                                             min_distance, max_ratio, surface_disp, error))
                 write_csv(output / "candidates.csv", rows)
@@ -576,13 +649,13 @@ def main() -> None:
     summary = {
         "status": "complete" if best else "no_accepted_candidate",
         "metal": args.metal or surface_metadata["formula"], "crystal_structure": surface_metadata["crystal_structure"],
-        "facet": surface_metadata["facet"], "slab_size": surface_metadata["size"], "adsorbate": args.adsorbate,
+        "facet": surface_metadata["facet"], "slab_size": surface_metadata["size"], "adsorbate": species_label,
         "structure_source": surface_metadata,
         "available_sites": available_sites, "evaluated_sites": sites,
         "n_candidates": len(rows), "n_accepted": len(accepted),
         "fixed_layers": args.fixed_layers, "fixed_atom_indices": fixed,
         "clean_slab": {"single_point_eV": slab_sp, "relaxed_eV": slab_relaxed, "steps": slab_steps, "converged": slab_converged},
-        "gas_reference": {"isomer": args.adsorbate, "single_point_eV": gas_sp, "relaxed_eV": gas_relaxed, "steps": gas_steps, "converged": gas_converged},
+        "gas_reference": {"isomer": species_label, "source_file": str(args.adsorbate_file.resolve()) if args.adsorbate_file else None, "single_point_eV": gas_sp, "relaxed_eV": gas_relaxed, "steps": gas_steps, "converged": gas_converged},
         "che_h2_reference": {"formula": "H2", "single_point_eV": h2_sp, "relaxed_eV": h2_relaxed, "steps": h2_steps, "converged": h2_converged,
                              "definition": "mu(H+ + e-) = 1/2 E(H2) - eU at the electronic-energy level"},
         "best_candidate": asdict(best) if best else None,

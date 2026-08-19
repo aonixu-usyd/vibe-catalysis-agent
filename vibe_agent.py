@@ -27,7 +27,7 @@ PREDICTION_METALS = tuple(
     and symbol not in NONMETALLIC_REFERENCE_ELEMENTS
 )
 DATASET_ADSORBATES = ("H", "O", "OH", "C", "CH", "CH2", "CH3")
-PREDICTION_ADSORBATES = ("CO", "CHO", "COH", "CHOH", "CH2OH")
+PREDICTION_ADSORBATES = ("CO", "CHO", "COH", "CHOH", "CH2OH", "N", "N2", "NH", "NH2", "NH3")
 SUPPORTED_ADSORBATES = DATASET_ADSORBATES + PREDICTION_ADSORBATES
 
 CHINESE_METAL_NAMES = {
@@ -53,6 +53,11 @@ METAL_ALIASES = {
     for symbol in PREDICTION_METALS
 }
 ADS_ALIASES = {
+    "NH3": ("nh3", "nh₃", "ammonia", "氨"),
+    "NH2": ("nh2", "nh₂", "amino", "氨基"),
+    "NH": ("nh", "imide", "亚氨基"),
+    "N2": ("n2", "n₂", "nitrogen", "氮气"),
+    "N": ("atomic nitrogen", "adsorbed nitrogen", "吸附氮", "氮原子"),
     "CH2OH": ("ch2oh", "ch₂oh", "hydroxymethyl", "羟甲基"),
     "CHOH": ("choh", "hydroxymethylene", "羟基亚甲基"),
     "COH": ("coh", "hydroxycarbyne", "羟基碳"),
@@ -83,7 +88,7 @@ def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
     metals = []
     for symbol, aliases in METAL_ALIASES.items():
         exact_symbol = re.search(rf"(?<![A-Za-z]){re.escape(symbol)}(?![a-z])", original)
-        facet_adjacent = re.search(rf"(?<![a-z]){symbol.lower()}\s*\(?\s*(?:0001|10\s*[-−m]\s*10|111|110|100)", text)
+        facet_adjacent = re.search(rf"(?<![a-z]){symbol.lower()}\s*\(?\s*(?:0001|10\s*[-−m]\s*10|[0-9]{{3}})", text)
         named = any(contains_alias(text, alias) for alias in aliases)
         if exact_symbol or facet_adjacent or named:
             metals.append(symbol)
@@ -91,16 +96,16 @@ def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
     masked = text
     for symbol in metals:
         masked = re.sub(
-            rf"(?<![a-z]){symbol.lower()}\s*(?=\(?\s*(?:0001|10\s*[-−m]\s*10|111|110|100))",
+            rf"(?<![a-z]){symbol.lower()}\s*(?=\(?\s*(?:0001|10\s*[-−m]\s*10|[0-9]{{3}}))",
             " ", masked,
         )
         for alias in METAL_ALIASES[symbol]:
             masked = masked.replace(alias.lower(), " ")
-    for species in ("CH2OH", "CHOH", "COH", "CHO", "CO", "CH3", "CH2", "OH", "CH"):
+    for species in ("CH2OH", "CHOH", "COH", "CHO", "CO", "NH3", "NH2", "NH", "N2", "CH3", "CH2", "OH", "CH"):
         if any(contains_alias(masked, a) for a in ADS_ALIASES[species]):
             adsorbates.append(species)
             for alias in ADS_ALIASES[species]: masked = masked.replace(alias.lower(), " ")
-    for species in ("C", "H", "O"):
+    for species in ("C", "H", "O", "N"):
         if any(contains_alias(masked, a) for a in ADS_ALIASES[species]): adsorbates.append(species)
     if any(term in text for term in ("chx", "chₓ", "碳氢", "hydrocarbon fragments")):
         adsorbates.extend(("C", "CH", "CH2", "CH3"))
@@ -110,7 +115,7 @@ def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
         metals = list(DATASET_METALS)
     if not adsorbates:
         if uploaded_structure:
-            raise ValueError("Name the adsorbate to add to the uploaded catalyst: CO, CHO/HCO, COH, CHOH, or CH2OH. C/O/N/H already present in the file remain catalyst atoms.")
+            raise ValueError("Name the adsorbate/intermediate to add, or pass its structure file. Existing atoms remain catalyst atoms.")
         adsorbates = ["C", "CH", "CH2", "CH3"]
     metals = [x for x in PREDICTION_METALS if x in metals]
     adsorbates = [x for x in SUPPORTED_ADSORBATES if x in set(adsorbates)]
@@ -130,7 +135,7 @@ def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
         crystal_structure = "uploaded"
     elif prediction_species:
         crystal_structure = reference_states[atomic_numbers[metals[0]]]["symmetry"]
-    facet_match = re.search(r"(?<!\d)(0001|10\s*[-−m]\s*10|111|110|100)(?!\d)", text)
+    facet_match = re.search(r"(?<!\d)(0001|10\s*[-−m]\s*10|[0-9]{3})(?!\d)", text)
     if uploaded_structure:
         facet = "custom"
     elif facet_match:
@@ -141,10 +146,8 @@ def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
         facet = "0001"
     else:
         facet = "111"
-    allowed = {"fcc": {"111", "100", "110"}, "bcc": {"111", "100", "110"}, "hcp": {"0001", "10m10"}}
-    if prediction_species and not uploaded_structure and facet not in allowed[crystal_structure]:
-        readable = ", ".join(sorted(x.replace("m", "-") for x in allowed[crystal_structure]))
-        raise ValueError(f"Unsupported {crystal_structure} facet {facet}; available facets: {readable}.")
+    if prediction_species and not uploaded_structure and crystal_structure == "hcp" and facet not in {"0001", "10m10"}:
+        raise ValueError("Arbitrary Miller generation currently supports cubic fcc/bcc crystals; upload prepared hcp high-index surfaces.")
     if dataset_species and facet != "111":
         raise ValueError(f"The packaged Catalysis-Hub baseline supports only facet 111, not {facet}.")
     mode = ("ase_uploaded_prediction" if uploaded_structure else

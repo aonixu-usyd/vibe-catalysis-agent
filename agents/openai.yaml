@@ -1,0 +1,6 @@
+interface:
+  display_name: "Vibe Catalysis"
+  short_description: "ASE + UMA barriers and catalytic kinetics"
+  default_prompt: "Use $vibe-catalysis to model my catalyst and intermediates, calculate adsorption and activation energies, solve steady-state microkinetics, and create Nature-style Python figures."
+policy:
+  allow_implicit_invocation: true
