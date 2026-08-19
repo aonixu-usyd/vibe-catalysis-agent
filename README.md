@@ -16,7 +16,8 @@ It has three deliberately separated modes:
 
 1. **Database-backed benchmark:** H/O/OH/C/CH/CH2/CH3 structures from
    `MamunHighT2019` are compared directly with deposited DFT references.
-2. **ASE automatic prediction:** CO/CHO/COH/CHOH/CH2OH structures are generated
+2. **ASE automatic prediction:** general intermediates, including
+   CO/CHO/COH/CHOH/CH2OH and N/N2/NH/NH2/NH3, are generated
    from scratch, relaxed with UMA, screened for failed geometries, and ranked.
    These are predictions, not DFT benchmark values.
 3. **Uploaded clean slab prediction:** an ASE-readable CIF, POSCAR/CONTCAR,
@@ -38,14 +39,18 @@ It has three deliberately separated modes:
 - Automatic ASE reference-state detection for elemental fcc/bcc/hcp metals.
 - User-supplied catalyst slabs, including alloys, oxides, defects, and supported
   models, provided they are already prepared as a clean periodic slab.
-- Common low-index surfaces: fcc(111/100/110), bcc(111/100/110), and
-  hcp(0001/10-10).
+- Common low-index surfaces plus arbitrary cubic three-index Miller surfaces,
+  including stepped surfaces such as Pt(211). Prepared non-cubic high-index
+  structures can be supplied in any ASE-readable format.
 - Surface-specific ASE high-symmetry sites; site names are never copied from an
   incompatible surface.
 - CO C-down/O-down enumeration; three azimuths for larger C/O/H intermediates.
 - Bottom-layer constraints, geometry checks, candidate table, and best structure.
 - Automatic publication-style energy graphics with ASE-native relaxed-structure
   top views, standard element colours/radii, and the periodic unit cell.
+- UMA NEB/CI-NEB forward/reverse activation barriers and TS candidates.
+- Ideal single-site mean-field steady-state microkinetics from elementary barriers.
+- Nature/CatMAP-style pathway figures in SVG, PDF, TIFF, and PNG with source data.
 
 ## Requirements
 
@@ -146,6 +151,7 @@ the facet is omitted: fcc→(111), bcc→(110), and hcp→(0001).
 
 ```bash
 python vibe_agent.py "Calculate CO adsorption on Ni(100)" --execute --yes
+python vibe_agent.py "Calculate NH2 adsorption on Pt(211)" --execute --yes
 python vibe_agent.py "计算CO在Fe(110)上的吸附能" --execute --yes
 python vibe_agent.py "计算CHO在Co(0001)上的吸附能" --execute --yes
 python vibe_agent.py "计算CO在Ru(10-10)上的吸附能" --execute --yes
@@ -158,6 +164,21 @@ python predict_adsorption.py \
   --metal Fe --facet 110 --adsorbate CO \
   --size 3 3 4 --fixed-layers 2
 ```
+
+### Reaction barriers and mechanisms
+
+Natural-language Skill calls are translated internally into a validated reaction plan;
+users do not need to author JSON or Python. The deterministic backend can also run a
+prepared plan directly:
+
+```bash
+python reaction_workflow.py reaction_plan.json --output results/mechanism
+```
+
+Each elementary step may request UMA NEB/CI-NEB. The workflow writes forward/reverse
+barriers, a TS candidate, steady-state microkinetic results when requested, and a
+Nature/CatMAP-style figure bundle. PCET endpoints must explicitly contain the same atoms,
+including the transferred proton and interfacial donor/acceptor environment.
 
 ### Use your own catalyst model
 
