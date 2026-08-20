@@ -114,6 +114,36 @@ def plot_top_views(initial_path, transition_state_path, final_path, output,
     )
 
 
+def plot_combined(result_path, initial_path, transition_state_path, final_path, output,
+                  initial_label="Initial state", final_label="Final state"):
+    """Combine the CatMAP-style barrier and aligned top views in one figure."""
+    data = json.loads(Path(result_path).read_text())
+    ea, de = float(data["forward_barrier_eV"]), float(data["reaction_energy_eV"])
+    structures = [read(Path(path), -1) for path in (initial_path, transition_state_path, final_path)]
+    labels = [initial_label, "TS candidate", final_label]
+    fig = plt.figure(figsize=(8.8, 6.8), constrained_layout=True)
+    grid = fig.add_gridspec(2, 3, height_ratios=(1.5, 1.0))
+    ax = fig.add_subplot(grid[0, :]); color = "#1756D8"
+    ax.hlines(0.0, 0.15, 0.85, color=color, lw=2.2)
+    x1, y1 = _smooth_segment(0.85, 1.5, 0.0, ea); x2, y2 = _smooth_segment(1.5, 2.15, ea, de)
+    ax.plot(x1, y1, color=color, lw=2.2); ax.plot(x2, y2, color=color, lw=2.2)
+    ax.hlines(de, 2.15, 2.85, color=color, lw=2.2)
+    pad = max(0.08, 0.035 * max(abs(ea), abs(de), 1.0))
+    ax.text(0.5, pad, initial_label, ha="center"); ax.text(1.5, ea + pad, f"TS\n$E_a$={ea:.2f} eV", ha="center")
+    ax.text(2.5, de + pad, final_label, ha="center"); ax.text(2.5, de - 3 * pad, f"$\\Delta E$={de:+.2f} eV", ha="center", va="top")
+    ax.set_xlim(0, 3); ax.set_xticks([]); ax.set_ylabel("Relative electronic energy (eV)")
+    ax.set_ylim(min(0.0, de) - max(0.45, 6 * pad), max(ea, de, 0.0) + max(0.55, 7 * pad))
+    ax.spines[["top", "right", "bottom"]].set_visible(False)
+    for i, (structure, label) in enumerate(zip(structures, labels)):
+        view = fig.add_subplot(grid[1, i]); plot_atoms(structure, ax=view, rotation="0x,0y,0z", show_unit_cell=1, radii=0.72)
+        view.set_title(label, fontsize=9); view.set_facecolor("#F8FAFC")
+    fig.suptitle("Reaction barrier and structures", fontsize=13, weight="bold")
+    output = Path(output)
+    for extension, kwargs in (("svg", {}), ("pdf", {}), ("png", {"dpi": 300}), ("tiff", {"dpi": 600})):
+        fig.savefig(output.with_suffix("." + extension), bbox_inches="tight", **kwargs)
+    plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("result", type=Path)
@@ -131,6 +161,8 @@ def main():
     if all(structure_paths):
         plot_top_views(*structure_paths, args.output.with_name("structure_top_views"),
                        args.initial_label, args.final_label)
+        plot_combined(args.result, *structure_paths, args.output.with_name("barrier_and_top_views"),
+                      args.initial_label, args.final_label)
     print(args.output)
 
 

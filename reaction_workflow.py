@@ -44,11 +44,13 @@ def main():
     if a.dry_run: print(out); return
     rows=[]
     for state in plan["states"]:
-        s=json.loads((out/"states"/state["id"]/"summary.json").read_text()); rows.append({"id":state["id"],"label":state.get("label",state["id"]),"total_energy_eV":s["best_candidate"]["relaxed_total_eV"]})
+        s=json.loads((out/"states"/state["id"]/"summary.json").read_text()); rows.append({"id":state["id"],"label":state.get("label",state["id"]),"total_energy_eV":s["best_candidate"]["relaxed_total_eV"],"structure":str((out/"states"/state["id"]/"best_structure.extxyz").resolve())})
     by={x["id"]:x for x in rows}; steps=[]
     for step in plan["steps"]:
         dg=by[step["product"]]["total_energy_eV"]-by[step["reactant"]]["total_energy_eV"]+float(step.get("reservoir_energy_eV",0))+float(step.get("energy_correction_eV",0)); item={**step,"delta_G_approx_eV":dg}
-        if step["id"] in barriers: item.update({k:barriers[step["id"]][k] for k in ("forward_barrier_eV","reverse_barrier_eV","status")})
+        if step["id"] in barriers:
+            item.update({k:barriers[step["id"]][k] for k in ("forward_barrier_eV","reverse_barrier_eV","status")})
+            item["transition_state_structure"]=str((out/"barriers"/step["id"]/"transition_state_candidate.extxyz").resolve())
         steps.append(item)
     result={"title":plan.get("title","Catalytic reaction pathway"),"states":rows,"steps":steps,"conditions":plan.get("conditions",{}),"energy_level":"UMA electronic energies"}; (out/"pathway_results.json").write_text(json.dumps(result,indent=2))
     if plan.get("microkinetics"):

@@ -45,6 +45,12 @@ Also export a three-panel top-view figure of the relaxed initial state, transiti
 candidate, and relaxed final state, using ASE standard element colours/radii and showing
 the periodic unit cell. Save this structure figure as SVG, PDF, 300 dpi PNG, and 600 dpi
 TIFF with a JSON structure manifest and caption text.
+The primary single-step deliverable must combine the energy diagram and the three aligned
+top views in one figure. For a sequential multi-step mechanism, render one continuous
+cumulative-energy path with every state level and TS peak; annotate every elementary
+forward barrier and reaction energy, and align top views of every stable state and
+available TS candidate beneath their reaction-coordinate positions. Never connect
+independent branches as though they were consecutive steps.
 
 ## Run microkinetics
 

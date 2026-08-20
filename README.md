@@ -53,6 +53,8 @@ It has three deliberately separated modes:
   PNG, TIFF, source CSV, and caption text).
 - Automatic initial-state/TS-candidate/final-state top views for every barrier run, with
   ASE element colours and the periodic unit cell (SVG, PDF, PNG, TIFF, and JSON manifest).
+- Combined barrier-plus-top-view figures for single steps, and continuous cumulative
+  multi-step pathways with each step's reaction energy, barrier, and aligned structures.
 - Ideal single-site mean-field steady-state microkinetics from elementary barriers.
 - Nature/CatMAP-style pathway figures in SVG, PDF, TIFF, and PNG with source data.
 

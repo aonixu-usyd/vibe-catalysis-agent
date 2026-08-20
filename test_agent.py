@@ -17,7 +17,7 @@ from predict_adsorption import (
     hydrogen_reference, molecule_template,
 )
 from visualize_results import classify_che_comparison, compute_che_states, reaction_rows
-from plot_barrier import plot_barrier, plot_top_views
+from plot_barrier import plot_barrier, plot_top_views, plot_combined
 
 
 ROOT = Path(__file__).resolve().parent
@@ -159,6 +159,19 @@ def offline_tests():
             assert top_views.with_suffix("." + suffix).is_file()
         assert top_views.with_name("structure_top_views_manifest.json").is_file()
         assert top_views.with_name("structure_top_views_caption.txt").is_file()
+        combined = temporary / "barrier_and_top_views"
+        plot_combined(result, *structures, combined, "2N*", r"N$_2$* + *")
+        for suffix in ("svg", "pdf", "png", "tiff"):
+            assert combined.with_suffix("." + suffix).is_file()
+        pathway = temporary / "pathway.json"
+        pathway.write_text(json.dumps({"title":"Test pathway","states":[
+            {"id":"a","label":"A*","structure":str(structures[0])},
+            {"id":"b","label":"B*","structure":str(structures[1])},
+            {"id":"c","label":"C*","structure":str(structures[2])}],"steps":[
+            {"id":"ab","reactant":"a","product":"b","mechanism":"chemical","delta_G_approx_eV":-0.4,"forward_barrier_eV":1.2,"transition_state_structure":str(structures[1])},
+            {"id":"bc","reactant":"b","product":"c","mechanism":"chemical","delta_G_approx_eV":-0.3,"forward_barrier_eV":0.8,"transition_state_structure":str(structures[1])}]}))
+        subprocess.run([sys.executable,str(ROOT/"plot_reaction_path.py"),str(pathway),"--output",str(temporary/"pathway")],check=True)
+        assert (temporary/"pathway.png").is_file()
     print(f"PASS: {len(CASES)} dataset parser cases, {len(auto_cases) + len(expanded_cases)} generated-surface parser cases, uploaded-structure planning/site discovery, fcc/bcc/hcp builders, constraints/orientations, and 1 safety rejection")
 
 
