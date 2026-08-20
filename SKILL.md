@@ -37,6 +37,22 @@ room-temperature liquid ensemble; sample proton orderings when quantitative conc
 depend on the water network. For non-fcc(111) surfaces, do not silently force this
 commensurability: build and validate a suitable periodic coincidence cell first.
 
+Use `build_aqueous_h_transfer.py` for explicit-water H-transfer endpoints. Hydrogenation
+means transferring H from the nearest water to the catalyst surface or adsorbate, leaving
+an OH-minus-like donor in the water network. Dehydrogenation means transferring H from a
+surface/adsorbate species to the nearest water oxygen, forming an H3O-plus-like acceptor.
+Never silently replace either reaction with H adsorption on a spare metal site. If the
+ionic endpoint is unstable without charge/potential, report that limitation instead of
+changing the reaction.
+
+For consecutive aqueous hydrogenation/dehydrogenation paths, construct every elementary
+step independently from stable-state structures that share the same pristine periodic
+water template. Keep the same number and ordering of solvent oxygen atoms in every step.
+In particular, a dehydrogenation step's initial water coordinates must come from the
+shared pristine template, never from the previous step's final hydronium/OH-like water
+structure. Only reaction energies and barriers are accumulated into the continuous plot;
+endpoint solvent coordinates are not chained between steps.
+
 Convert natural language into a reaction plan for `reaction_workflow.py`. Every edge must
 be an elementary `pcet`, `decoupled-proton`, `decoupled-electron`, `coupled`, or `chemical`
 step. Split multi-proton/electron transformations.

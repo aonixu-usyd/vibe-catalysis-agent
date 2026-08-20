@@ -40,6 +40,15 @@ cluster. This is a constructed ice-like starting interface rather than a liquid 
 for other facets or lattices, validate a periodic coincidence cell instead of silently
 forcing the fcc(111) motif.
 
+Use `build_aqueous_h_transfer.py` for endpoint semantics: aqueous hydrogenation transfers
+H from the nearest water to the surface/adsorbate and leaves an OH-minus-like donor;
+aqueous dehydrogenation transfers surface/adsorbate H to the nearest water and creates an
+H3O-plus-like acceptor. Never substitute H* on a spare metal site when the requested
+reaction is proton transfer to/from water. For a multistep path, rebuild each step from
+stable-state structures sharing one pristine periodic water template. Preserve solvent
+oxygen count/order, never inherit a previous final water geometry as the next initial
+geometry, and combine only the independently calculated energies/barriers in the plot.
+
 Extract:
 
 - structure source: either an attached/local catalyst structure readable by ASE, or an

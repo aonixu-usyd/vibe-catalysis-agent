@@ -172,6 +172,19 @@ def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
                 "preserve_water_atoms_in_all_neb_images": True,
             },
             "reaction_kind": "electrochemical_hydrogen_transfer",
+            "aqueous_hydrogen_transfer_semantics": {
+                "hydrogenation": "transfer H from the nearest explicit water to the catalyst surface or adsorbate; leave an OH-minus-like donor",
+                "dehydrogenation": "transfer adsorbate/surface H to the nearest explicit water; form an H3O-plus-like acceptor",
+                "endpoint_builder": "build_aqueous_h_transfer.py",
+                "forbid_Hstar_substitution": True,
+            },
+            "multistep_solvent_policy": {
+                "shared_pristine_water_template": True,
+                "build_each_step_independently": True,
+                "same_water_oxygen_count_each_step": True,
+                "inherit_previous_final_water_coordinates": False,
+                "combine_only_reaction_energies_and_barriers": True,
+            },
             "calculations": ["construct_interface", "relax_endpoints", "ci_neb"],
             "execution_guard": "Construct and inspect the periodic interface before UMA; charged/constant-potential claims require a compatible method.",
         }

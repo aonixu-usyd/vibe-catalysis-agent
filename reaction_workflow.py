@@ -15,6 +15,16 @@ def validate(plan):
         h,e=int(step.get("protons",0)),int(step.get("electrons",0))
         if abs(h)>1 or abs(e)>1: raise ValueError("Split multi-pair transfer into elementary steps")
         if step["mechanism"]=="pcet" and (h==0 or h!=e): raise ValueError("PCET requires one coupled proton/electron pair")
+    aqueous_steps=[s for s in plan.get("steps",[]) if s.get("aqueous_h_transfer")]
+    if aqueous_steps:
+        policy=plan.get("multistep_solvent_policy",{})
+        if not policy.get("shared_pristine_water_template") or policy.get("inherit_previous_final_water_coordinates",True):
+            raise ValueError("Aqueous H-transfer paths require a shared pristine water template and forbid previous-final water inheritance")
+        for step in aqueous_steps:
+            kind=step["aqueous_h_transfer"].get("kind")
+            if kind not in {"hydrogenation","dehydrogenation"}: raise ValueError("Aqueous H transfer must be hydrogenation or dehydrogenation")
+            if kind=="hydrogenation" and "target_index" not in step["aqueous_h_transfer"]: raise ValueError("Aqueous hydrogenation needs target_index")
+            if kind=="dehydrogenation" and "donor_hydrogen_index" not in step["aqueous_h_transfer"]: raise ValueError("Aqueous dehydrogenation needs donor_hydrogen_index")
     return plan
 
 

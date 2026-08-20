@@ -180,6 +180,12 @@ in the periodic 2/3-ML H-down hexagonal motif. It writes EXTXYZ, TRAJ, CIF,
 POSCAR, and a structure manifest without loading UMA. Use the resulting
 interface to create atom-identical endpoints before NEB/CI-NEB.
 
+`build_aqueous_h_transfer.py` then applies the requested electrochemical geometry:
+water-to-surface/adsorbate H transfer for hydrogenation (OH-minus-like donor), or
+surface/adsorbate-to-water H transfer for dehydrogenation (H3O-plus-like acceptor).
+Multistep calculations rebuild each step from the same pristine periodic water template;
+they never reuse the previous final water coordinates as the next initial structure.
+
 ```bash
 python build_periodic_ice_layer.py --metal Pt --facet 111 \
   --output results/Pt111_periodic_ice

@@ -8,7 +8,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from ase import Atoms
+from ase import Atom, Atoms
 from ase.io import write
 
 from vibe_agent import parse_prompt
@@ -19,6 +19,11 @@ from predict_adsorption import (
 from visualize_results import classify_che_comparison, compute_che_states, reaction_rows
 from plot_barrier import plot_barrier, plot_top_views, plot_combined
 from build_periodic_ice_layer import build_periodic_ice_layer
+from build_aqueous_h_transfer import (
+    build_dehydrogenation_endpoints, build_hydrogenation_endpoints,
+    build_independent_steps,
+)
+from reaction_workflow import validate as validate_reaction_plan
 
 
 ROOT = Path(__file__).resolve().parent
@@ -38,12 +43,49 @@ def offline_tests():
     assert aqueous["mode"] == "aqueous_electrochemical_barrier"
     assert aqueous["interface_model"]["water_count"] == 6
     assert aqueous["interface_model"]["preserve_water_atoms_in_all_neb_images"]
+    assert aqueous["aqueous_hydrogen_transfer_semantics"]["forbid_Hstar_substitution"]
+    assert not aqueous["multistep_solvent_policy"]["inherit_previous_final_water_coordinates"]
     hydrated, ice_metadata = build_periodic_ice_layer("Pt", lattice_a=3.92)
     assert hydrated.get_chemical_formula() == "H12O6Pt36"
     assert ice_metadata["periodic_oxygen_coordination"] == [3] * 6
     for oxygen, h1, h2 in ice_metadata["water_atom_indices_zero_based"]:
         assert abs(hydrated.get_distance(oxygen, h1, mic=True) - .97) < 1e-6
         assert abs(hydrated.get_angle(h1, oxygen, h2, mic=True) - 104.5) < 1e-6
+    # Endpoint semantics: water -> adsorbate for hydrogenation; adsorbate ->
+    # nearest water for dehydrogenation. Both preserve atom order and water O count.
+    n_position = hydrated.positions[27] + [0., 0., 1.8]
+    bare_n = hydrated.copy(); bare_n += Atom("N", n_position)
+    h_is, h_fs, h_meta = build_hydrogenation_endpoints(
+        bare_n, len(bare_n) - 1, ice_metadata["water_atom_indices_zero_based"])
+    assert h_is.get_chemical_symbols() == h_fs.get_chemical_symbols()
+    assert abs(h_fs.get_distance(h_meta["target_index"], h_meta["transferred_hydrogen_index"], mic=True) - 1.02) < 1e-6
+    assert h_meta["water_oxygen_count"] == 6
+    nh = hydrated.copy(); nh += Atom("N", n_position); nh += Atom("H", n_position + [0., 0., 1.02])
+    donor_h = len(nh) - 1
+    d_is, d_fs, d_meta = build_dehydrogenation_endpoints(
+        nh, donor_h, ice_metadata["water_atom_indices_zero_based"])
+    assert abs(d_fs.get_distance(d_meta["acceptor_oxygen_index"], donor_h, mic=True) - .99) < 1e-6
+    assert d_fs.get_distance(len(nh)-2, donor_h, mic=True) > d_is.get_distance(len(nh)-2, donor_h, mic=True)
+    independent = build_independent_steps(
+        {"N": bare_n, "NH": nh},
+        [{"id":"h","kind":"hydrogenation","reactant_template":"N","target_index":len(bare_n)-1},
+         {"id":"d","kind":"dehydrogenation","reactant_template":"NH","donor_hydrogen_index":donor_h}],
+        ice_metadata["water_atom_indices_zero_based"],
+    )
+    assert all(not manifest["inherited_previous_final_water_coordinates"] for _,_,manifest in independent)
+    validate_reaction_plan({"states":[{"id":"a"},{"id":"b"}],"multistep_solvent_policy":{
+        "shared_pristine_water_template":True,"inherit_previous_final_water_coordinates":False},"steps":[{
+        "id":"s","reactant":"a","product":"b","mechanism":"pcet","protons":-1,"electrons":-1,
+        "aqueous_h_transfer":{"kind":"dehydrogenation","donor_hydrogen_index":55}}]})
+    try:
+        validate_reaction_plan({"states":[{"id":"a"},{"id":"b"}],"multistep_solvent_policy":{
+            "shared_pristine_water_template":True,"inherit_previous_final_water_coordinates":True},"steps":[{
+            "id":"bad","reactant":"a","product":"b","mechanism":"pcet","protons":1,"electrons":1,
+            "aqueous_h_transfer":{"kind":"hydrogenation","target_index":54}}]})
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Aqueous multistep validation accepted previous-final solvent inheritance")
     for prompt, metals, adsorbates in CASES:
         plan = parse_prompt(prompt)
         assert plan["metals"] == metals, (prompt, plan["metals"], metals)
