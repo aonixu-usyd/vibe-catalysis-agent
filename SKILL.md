@@ -25,6 +25,18 @@ rank accepted candidates, and preserve structured CSV/JSON and relaxed structure
 
 ## Build mechanisms and barriers
 
+When a request combines a water/aqueous environment with an electrochemical
+hydrogenation or dehydrogenation barrier, default to an explicit periodic ice-like
+interface. Run `build_periodic_ice_layer.py`: use a 3x3 fcc(111) catalyst slab and six
+waters at 2/3 ML in a periodic H-down `(sqrt(3)xsqrt(3))R30-degree` honeycomb, with
+bottom catalyst layers fixed. The six waters and catalyst must both be periodic in-plane,
+and all water atoms must remain present with identical ordering in every endpoint and NEB
+image. Construct and present top/side views before energy calculations. Do not replace
+the layer with a finite water cluster. Treat this as the default initial interface, not a
+room-temperature liquid ensemble; sample proton orderings when quantitative conclusions
+depend on the water network. For non-fcc(111) surfaces, do not silently force this
+commensurability: build and validate a suitable periodic coincidence cell first.
+
 Convert natural language into a reaction plan for `reaction_workflow.py`. Every edge must
 be an elementary `pcet`, `decoupled-proton`, `decoupled-electron`, `coupled`, or `chemical`
 step. Split multi-proton/electron transformations.

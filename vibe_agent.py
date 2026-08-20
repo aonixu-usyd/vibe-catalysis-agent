@@ -83,6 +83,17 @@ def contains_alias(text: str, alias: str) -> bool:
 def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
     original = prompt.replace("（", "(").replace("）", ")")
     text = prompt.lower().replace("（", "(").replace("）", ")")
+    water_environment = any(term in text for term in (
+        "水环境", "水相", "显式水", "有水", "含水", "水层", "冰层",
+        "aqueous", "in water", "water environment", "explicit water",
+    ))
+    electrochemical_h_transfer = any(term in text for term in (
+        "加氢", "脱氢", "volmer", "hydrogenation", "dehydrogenation",
+        "proton transfer", "pcet",
+    ))
+    barrier_request = any(term in text for term in (
+        "能垒", "势垒", "过渡态", "反应路径", "barrier", "neb", "transition state",
+    ))
     if contains_alias(text, "co2"):
         raise ValueError("CO2 is not yet supported by the automatic builder; no calculation was started.")
     metals = []
@@ -146,6 +157,24 @@ def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
         facet = "0001"
     else:
         facet = "111"
+    if water_environment and electrochemical_h_transfer and barrier_request:
+        return {
+            "metals": metals, "facet": facet, "adsorbates": adsorbates,
+            "crystal_structure": crystal_structure,
+            "mode": "aqueous_electrochemical_barrier",
+            "interface_model": {
+                "explicit_water": True,
+                "default_builder": "build_periodic_ice_layer.py",
+                "water_count": 6,
+                "coverage_ML": 2 / 3,
+                "periodicity": "catalyst and water layer periodic in-plane",
+                "motif": "H-down (sqrt(3)xsqrt(3))R30-degree hexagonal honeycomb",
+                "preserve_water_atoms_in_all_neb_images": True,
+            },
+            "reaction_kind": "electrochemical_hydrogen_transfer",
+            "calculations": ["construct_interface", "relax_endpoints", "ci_neb"],
+            "execution_guard": "Construct and inspect the periodic interface before UMA; charged/constant-potential claims require a compatible method.",
+        }
     if prediction_species and not uploaded_structure and crystal_structure == "hcp" and facet not in {"0001", "10m10"}:
         raise ValueError("Arbitrary Miller generation currently supports cubic fcc/bcc crystals; upload prepared hcp high-index surfaces.")
     if dataset_species and facet != "111":
@@ -201,6 +230,18 @@ def main():
     print(f"\nValidated plan saved to: {plan_path}")
     if not args.execute: return
     if not args.yes and input("Run this plan? [y/N] ").strip().lower() not in {"y", "yes", "是"}: return
+    if plan["mode"] == "aqueous_electrochemical_barrier":
+        if not plan["metals"]:
+            raise ValueError("Automatic periodic ice construction currently requires a generated fcc(111) metal slab")
+        interface_output = ROOT / "results" / job_name / "periodic_ice_interface"
+        subprocess.run([
+            sys.executable, str(ROOT / "build_periodic_ice_layer.py"),
+            "--metal", plan["metals"][0], "--facet", plan["facet"],
+            "--output", str(interface_output),
+        ], cwd=ROOT, check=True)
+        print(f"\nPeriodic six-water interface constructed: {interface_output}")
+        print("No UMA energy was started by the natural-language planner; define atom-identical reaction endpoints before CI-NEB.")
+        return
     if plan["mode"] in {"ase_automatic_prediction", "ase_uploaded_prediction"}:
         prediction_root = ROOT / "results" / job_name
         commands = []

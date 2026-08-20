@@ -29,6 +29,17 @@ authenticate through Hugging Face. Access and model weights are not bundled.
 
 ## Translate the request
 
+When the request combines a water/aqueous environment with an electrochemical
+hydrogenation or dehydrogenation barrier, use the repository's
+`build_periodic_ice_layer.py` before endpoint construction. The default fcc(111)
+interface is a 3x3 slab plus six waters (2/3 ML) in a periodic H-down
+`(sqrt(3)xsqrt(3))R30-degree` honeycomb. Both catalyst and water layer are periodic
+in-plane. Preserve every water atom and its ordering in all endpoints and NEB images,
+and show top and side views before running UMA. Never substitute a finite six-water
+cluster. This is a constructed ice-like starting interface rather than a liquid ensemble;
+for other facets or lattices, validate a periodic coincidence cell instead of silently
+forcing the fcc(111) motif.
+
 Extract:
 
 - structure source: either an attached/local catalyst structure readable by ASE, or an

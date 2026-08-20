@@ -18,6 +18,7 @@ from predict_adsorption import (
 )
 from visualize_results import classify_che_comparison, compute_che_states, reaction_rows
 from plot_barrier import plot_barrier, plot_top_views, plot_combined
+from build_periodic_ice_layer import build_periodic_ice_layer
 
 
 ROOT = Path(__file__).resolve().parent
@@ -33,6 +34,16 @@ CASES = [
 
 
 def offline_tests():
+    aqueous = parse_prompt("在水环境中计算Pt111表面电化学加氢步的反应能垒")
+    assert aqueous["mode"] == "aqueous_electrochemical_barrier"
+    assert aqueous["interface_model"]["water_count"] == 6
+    assert aqueous["interface_model"]["preserve_water_atoms_in_all_neb_images"]
+    hydrated, ice_metadata = build_periodic_ice_layer("Pt", lattice_a=3.92)
+    assert hydrated.get_chemical_formula() == "H12O6Pt36"
+    assert ice_metadata["periodic_oxygen_coordination"] == [3] * 6
+    for oxygen, h1, h2 in ice_metadata["water_atom_indices_zero_based"]:
+        assert abs(hydrated.get_distance(oxygen, h1, mic=True) - .97) < 1e-6
+        assert abs(hydrated.get_angle(h1, oxygen, h2, mic=True) - 104.5) < 1e-6
     for prompt, metals, adsorbates in CASES:
         plan = parse_prompt(prompt)
         assert plan["metals"] == metals, (prompt, plan["metals"], metals)
