@@ -40,12 +40,16 @@ def ice_primitive_cell(oo_distance=2.76):
 
 
 def match_periodic_ice(cell,oo_distance=2.76,max_strain=.08,max_substrate_area=4,
-                       allow_substrate_expansion=True):
-    """Match 2D integer cells; water count is 2*det(ice matrix), never fixed."""
+                       allow_substrate_expansion=False):
+    """Match ice to a catalyst cell without changing that cell by default."""
     substrate=np.asarray(cell,float)[:2,:2]
     if abs(np.linalg.det(substrate)) < 1e-8: raise ValueError("Slab needs two independent in-plane vectors")
     water=ice_primitive_cell(oo_distance); ratio=abs(np.linalg.det(substrate))/abs(np.linalg.det(water))
-    smats=integer_matrices(max_substrate_area if allow_substrate_expansion else 1)
+    # A determinant-one integer matrix can rotate/shear the displayed cell basis
+    # even though it spans the same infinite lattice.  That is still an
+    # unauthorized catalyst-cell change.  Fixed mode therefore permits only I.
+    smats=(integer_matrices(max_substrate_area) if allow_substrate_expansion
+           else [np.eye(2,dtype=int)])
     wmats=integer_matrices(max(2,int(np.ceil(ratio*max_substrate_area))+2))
     candidates=[]
     for sm in smats:
@@ -135,8 +139,9 @@ def water_network_metrics(atoms,water_indices,oo_cutoff=3.15,hbond_cutoff=2.25):
 
 
 def build_periodic_ice_layer_on_slab(slab,oo_distance=2.76,max_strain=.08,max_substrate_area=4,
-                                     allow_substrate_expansion=True,fixed_layers=2,
+                                     allow_substrate_expansion=False,fixed_layers=2,
                                      interface_family="auto"):
+    original_cell=slab.cell.array.copy(); original_pbc=slab.pbc.copy()
     requested_area=inplane_area(slab.cell);requested_angle=float(slab.cell.angles()[2])
     lengths=slab.cell.lengths()[:2]; angle=float(slab.cell.angles()[2])
     square=(abs(angle-90.)<=3. and abs(max(lengths)/min(lengths)-4/3)<=.08)
@@ -157,9 +162,15 @@ def build_periodic_ice_layer_on_slab(slab,oo_distance=2.76,max_strain=.08,max_su
                   "fixed_atom_indices_zero_based":fixed,"water_atom_indices_zero_based":water_indices,
                   "validation":metrics,
                   "warning":"Constructed buckled ice-like initial model; relax, inspect, and sample proton orderings before quantitative interpretation."}
+        if not np.array_equal(atoms.cell.array,original_cell) or not np.array_equal(atoms.pbc,original_pbc):
+            raise RuntimeError("Catalyst cell/PBC changed during water construction")
+        metadata["catalyst_cell_preserved_exactly"]=True
         return atoms,metadata
     match=match_periodic_ice(slab.cell,oo_distance,max_strain,max_substrate_area,allow_substrate_expansion)
     slab=make_supercell(slab,embed(match["substrate_matrix"]),wrap=True)
+    if not allow_substrate_expansion and (not np.array_equal(slab.cell.array,original_cell) or
+                                          not np.array_equal(slab.pbc,original_pbc)):
+        raise RuntimeError("Fixed catalyst cell changed during ice matching")
     levels=sorted(set(np.round(slab.positions[:,2],6)))
     fixed=[i for i,z in enumerate(slab.positions[:,2]) if any(abs(z-level)<.05 for level in levels[:fixed_layers])]
     top_z=max(slab.positions[:,2]);oxygen=water_oxygen_net(match["water_matrix"],slab.cell,oo_distance)
@@ -198,6 +209,9 @@ def build_periodic_ice_layer_on_slab(slab,oo_distance=2.76,max_strain=.08,max_su
               "fixed_atom_indices_zero_based":fixed,"water_atom_indices_zero_based":water_indices,
               "validation":water_network_metrics(atoms,water_indices),
               "warning":"Constructed matched ice-like initial model; relax and inspect before interpreting energies."}
+    metadata["catalyst_cell_preserved_exactly"]=bool(np.array_equal(atoms.cell.array,original_cell) and np.array_equal(atoms.pbc,original_pbc))
+    if not allow_substrate_expansion and not metadata["catalyst_cell_preserved_exactly"]:
+        raise RuntimeError("Catalyst cell/PBC changed during water construction")
     return atoms,metadata
 
 
@@ -215,8 +229,9 @@ def build_periodic_ice_layer(metal="Pt",facet="111",size=None,lattice_a=None,lay
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument("--metal",default="Pt");p.add_argument("--facet",default="111");p.add_argument("--structure",type=Path);p.add_argument("--size",nargs=2,type=int);p.add_argument("--lattice-a",type=float);p.add_argument("--layers",type=int,default=4);p.add_argument("--vacuum",type=float,default=10.);p.add_argument("--fixed-layers",type=int,default=2);p.add_argument("--ice-oo-distance",type=float,default=2.76);p.add_argument("--max-strain",type=float,default=.08);p.add_argument("--max-substrate-area",type=int,default=4);p.add_argument("--fixed-catalyst-cell",action="store_true");p.add_argument("--interface-family",choices=("auto","honeycomb","square-4x3"),default="auto");p.add_argument("--output",type=Path,required=True);a=p.parse_args()
-    options={"oo_distance":a.ice_oo_distance,"max_strain":a.max_strain,"max_substrate_area":a.max_substrate_area,"allow_substrate_expansion":not a.fixed_catalyst_cell,"fixed_layers":a.fixed_layers,"interface_family":a.interface_family}
+    p=argparse.ArgumentParser();p.add_argument("--metal",default="Pt");p.add_argument("--facet",default="111");p.add_argument("--structure",type=Path);p.add_argument("--size",nargs=2,type=int);p.add_argument("--lattice-a",type=float);p.add_argument("--layers",type=int,default=4);p.add_argument("--vacuum",type=float,default=10.);p.add_argument("--fixed-layers",type=int,default=2);p.add_argument("--ice-oo-distance",type=float,default=2.76);p.add_argument("--max-strain",type=float,default=.08);p.add_argument("--max-substrate-area",type=int,default=4);p.add_argument("--allow-substrate-expansion",action="store_true",help="Explicitly authorize building a catalyst supercell; catalyst cells are otherwise immutable");p.add_argument("--fixed-catalyst-cell",action="store_true",help=argparse.SUPPRESS);p.add_argument("--interface-family",choices=("auto","honeycomb","square-4x3"),default="auto");p.add_argument("--output",type=Path,required=True);a=p.parse_args()
+    if a.fixed_catalyst_cell and a.allow_substrate_expansion: p.error("Conflicting catalyst-cell options")
+    options={"oo_distance":a.ice_oo_distance,"max_strain":a.max_strain,"max_substrate_area":a.max_substrate_area,"allow_substrate_expansion":a.allow_substrate_expansion,"fixed_layers":a.fixed_layers,"interface_family":a.interface_family}
     if a.structure: atoms,metadata=build_periodic_ice_layer_on_slab(read(a.structure.resolve(),-1),**options);metadata["surface_source"]=str(a.structure.resolve())
     else: atoms,metadata=build_periodic_ice_layer(a.metal,a.facet,a.size,a.lattice_a,a.layers,a.vacuum,**options)
     out=a.output.resolve();out.mkdir(parents=True,exist_ok=False);write(out/"periodic_ice_interface.extxyz",atoms);write(out/"periodic_ice_interface.traj",atoms);write(out/"periodic_ice_interface.cif",atoms);write(out/"POSCAR",atoms,format="vasp",direct=True,sort=False);(out/"structure_manifest.json").write_text(json.dumps(metadata,indent=2));print(out)

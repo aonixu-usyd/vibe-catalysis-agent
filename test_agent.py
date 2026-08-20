@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+import numpy as np
 
 from ase import Atom, Atoms
 from ase.io import write
@@ -48,14 +49,18 @@ def offline_tests():
     hydrated, ice_metadata = build_periodic_ice_layer("Pt", lattice_a=3.92)
     assert hydrated.get_chemical_formula() == "H12O6Pt36"
     assert ice_metadata["periodic_oxygen_coordination"] == [3] * 6
+    assert ice_metadata["catalyst_cell_preserved_exactly"]
+    assert np.isclose(hydrated.cell.angles()[2], 60.0)
     cu100_water, cu100_metadata = build_periodic_ice_layer("Cu", "100", lattice_a=3.61)
     assert cu100_metadata["n_water"] == 8
     assert cu100_metadata["nominal_coverage_ML"] == 2 / 3
     assert cu100_metadata["validation"]["oxygen_buckling_A"] > 0.5
     assert min(cu100_metadata["validation"]["periodic_oxygen_coordination"]) >= 1
     assert min(cu100_metadata["validation"]["hydrogen_bond_acceptor_contacts"]) >= 1
+    assert cu100_metadata["catalyst_cell_preserved_exactly"]
     pt100_hydrated, pt100_metadata = build_periodic_ice_layer(
-        "Pt", "100", (2, 2), lattice_a=3.92, max_substrate_area=4)
+        "Pt", "100", (2, 2), lattice_a=3.92, max_substrate_area=4,
+        allow_substrate_expansion=True)
     assert pt100_metadata["water_count_rule"].endswith("never fixed")
     assert pt100_metadata["n_water"] != 6
     assert pt100_metadata["n_water"] == len(pt100_metadata["water_atom_indices_zero_based"])

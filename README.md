@@ -180,6 +180,9 @@ from surface area, in-plane shape/angle, Ice-Ih O-O spacing, and allowed strain.
 fcc(100) surfaces instead use a compact, buckled 4x3/8-water periodic network (2/3 ML),
 with explicit periodic connectivity and hydrogen-bond validation. Water is not constrained
 to a common z plane. The
+input catalyst cell and PBC are immutable by default for every material. The builder does
+not rotate/rebase, shear, or expand them; explicit `--allow-substrate-expansion` is required
+to authorize a catalyst supercell.
 3x3 Pt(111) six-water model is one matched example, not a universal default. It writes EXTXYZ, TRAJ, CIF,
 POSCAR, and a structure manifest without loading UMA. Use the resulting
 interface to create atom-identical endpoints before NEB/CI-NEB.

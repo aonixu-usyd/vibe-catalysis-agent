@@ -32,8 +32,11 @@ Ice-Ih(0001)-like honeycomb using integer coincidence supercells; near-square fc
 surfaces default to the compact buckled 4x3/8-water (2/3 ML) periodic motif. Never force
 all water oxygens into one plane. Determine
 the water count from the matched surface area, cell lengths/angle, ice O-O spacing, and
-reported strain; never assume six waters. If a fixed catalyst cell has no acceptable
-match, enlarge the catalyst supercell or stop rather than distort the layer silently.
+reported strain; never assume six waters. Treat every catalyst cell as immutable by
+default, for generated and uploaded materials alike: preserve all three cell vectors,
+lengths, angles and PBC exactly. Do not apply determinant-one basis changes, rotations,
+shears or supercell expansion. If no acceptable water match exists, stop. Expand a
+catalyst supercell only when the user explicitly requests that expansion.
 Prefer the smallest validated periodic cell. Require the generated manifest to pass
 periodic O-network and directional hydrogen-bond checks before starting UMA or NEB.
 The matched water layer and catalyst must both be periodic in-plane, and all water atoms
