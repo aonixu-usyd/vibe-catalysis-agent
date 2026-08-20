@@ -5,6 +5,7 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from ase import Atoms
@@ -15,6 +16,7 @@ from predict_adsorption import (
     hydrogen_reference, molecule_template,
 )
 from visualize_results import classify_che_comparison, compute_che_states, reaction_rows
+from plot_barrier import plot_barrier
 
 
 ROOT = Path(__file__).resolve().parent
@@ -129,6 +131,19 @@ def offline_tests():
     steps = reaction_rows(["CO", "CHO", "CHOH"], [0.0, -0.4, -0.7], 0, "sequential_path")
     assert abs(steps[0]["reaction_energy_eV"] + 0.4) < 1e-12
     assert abs(steps[1]["reaction_energy_eV"] + 0.3) < 1e-12
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        temporary = Path(temporary_directory)
+        result = temporary / "barrier.json"
+        result.write_text(json.dumps({
+            "method": "CI-NEB", "forward_barrier_eV": 1.2,
+            "reverse_barrier_eV": 1.6, "reaction_energy_eV": -0.4,
+        }))
+        output = temporary / "barrier_diagram"
+        plot_barrier(result, output, "2N*", r"N$_2$* + *")
+        for suffix in ("svg", "pdf", "png", "tiff"):
+            assert output.with_suffix("." + suffix).is_file()
+        assert output.with_name("barrier_diagram_source_data.csv").is_file()
+        assert output.with_name("barrier_diagram_caption.txt").is_file()
     print(f"PASS: {len(CASES)} dataset parser cases, {len(auto_cases) + len(expanded_cases)} generated-surface parser cases, uploaded-structure planning/site discovery, fcc/bcc/hcp builders, constraints/orientations, and 1 safety rejection")
 
 

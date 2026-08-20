@@ -49,6 +49,8 @@ It has three deliberately separated modes:
 - Automatic publication-style energy graphics with ASE-native relaxed-structure
   top views, standard element colours/radii, and the periodic unit cell.
 - UMA NEB/CI-NEB forward/reverse activation barriers and TS candidates.
+- Automatic CatMAP-style barrier diagrams for every completed NEB/CI-NEB run (SVG, PDF,
+  PNG, TIFF, source CSV, and caption text).
 - Ideal single-site mean-field steady-state microkinetics from elementary barriers.
 - Nature/CatMAP-style pathway figures in SVG, PDF, TIFF, and PNG with source data.
 

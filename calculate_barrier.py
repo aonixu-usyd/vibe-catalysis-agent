@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ASE + FAIR-Chem UMA NEB/CI-NEB activation-barrier workflow."""
 
-import argparse, csv, json
+import argparse, csv, json, subprocess, sys
 from pathlib import Path
 import numpy as np
 from ase.io import read, write
@@ -25,6 +25,7 @@ def main():
     p.add_argument("--method", choices=("aseneb", "improvedtangent", "eb", "spline", "string"), default="aseneb")
     p.add_argument("--interpolation", choices=("idpp", "linear"), default="idpp")
     p.add_argument("--climb", action="store_true"); p.add_argument("--model", default="uma-s-1p2"); p.add_argument("--device", default="cpu")
+    p.add_argument("--initial-label", default="Initial state"); p.add_argument("--final-label", default="Final state")
     a = p.parse_args()
     if a.images < 3: raise ValueError("NEB needs at least three total images")
     out = a.output.resolve(); out.mkdir(parents=True, exist_ok=False)
@@ -46,7 +47,11 @@ def main():
               "reverse_barrier_eV": energies[ts] - energies[-1], "reaction_energy_eV": energies[-1] - energies[0],
               "optimizer_steps": int(opt.nsteps), "energies": rows,
               "scientific_warning": "UMA NEB prediction; validate important saddles with consistent DFT and frequencies."}
-    (out / "barrier.json").write_text(json.dumps(result, indent=2)); write(out / "transition_state_candidate.extxyz", images[ts]); print(json.dumps(result, indent=2))
+    result_path = out / "barrier.json"; result_path.write_text(json.dumps(result, indent=2)); write(out / "transition_state_candidate.extxyz", images[ts])
+    subprocess.run([sys.executable, str(Path(__file__).with_name("plot_barrier.py")), str(result_path),
+                    "--output", str(out / "barrier_diagram"), "--initial-label", a.initial_label,
+                    "--final-label", a.final_label], check=True)
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__": main()

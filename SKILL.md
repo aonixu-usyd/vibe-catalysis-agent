@@ -35,6 +35,13 @@ atoms in both endpoints. Report forward/reverse barriers, reaction energy, image
 convergence, and the TS candidate. Do not call the highest UMA image a validated saddle
 without CI-NEB/dimer refinement and a one-imaginary-mode frequency check.
 
+Every completed NEB/CI-NEB calculation must automatically call `plot_barrier.py` and
+export a CatMAP-style diagram with horizontal initial/final state levels and a smooth
+transition-state peak. Export SVG, PDF, 300 dpi PNG, 600 dpi TIFF, source CSV, and caption
+text beside `barrier.json`; use chemically meaningful endpoint labels when known. This
+diagram represents the optimized state and barrier energies, while `neb_energies.csv`
+preserves the discrete image energies for convergence inspection.
+
 ## Run microkinetics
 
 Use `microkinetics.py` with calculated barriers and explicit reaction stoichiometry,
