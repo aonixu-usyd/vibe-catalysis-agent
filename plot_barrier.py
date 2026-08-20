@@ -10,6 +10,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from ase.io import read
+from ase.visualize.plot import plot_atoms
 
 
 def _smooth_segment(x0, x1, y0, y1, n=80):
@@ -81,14 +83,54 @@ def plot_barrier(result_path, output, initial_label="Initial state", final_label
     )
 
 
+def plot_top_views(initial_path, transition_state_path, final_path, output,
+                   initial_label="Initial state", final_label="Final state"):
+    """Render the optimized endpoints and TS candidate along the surface normal."""
+    paths = [Path(initial_path), Path(transition_state_path), Path(final_path)]
+    atoms = [read(path, -1) for path in paths]
+    labels = [initial_label, "TS candidate", final_label]
+    fig, axes = plt.subplots(1, 3, figsize=(9.0, 3.2), constrained_layout=True)
+    for ax, structure, label in zip(axes, atoms, labels):
+        plot_atoms(structure, ax=ax, rotation="0x,0y,0z", show_unit_cell=1, radii=0.72)
+        ax.set_title(label, fontsize=10, pad=8)
+        ax.set_facecolor("#F8FAFC")
+    fig.suptitle("NEB structures · top view", fontsize=12, weight="bold")
+
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    for extension, kwargs in (("svg", {}), ("pdf", {}), ("png", {"dpi": 300}),
+                              ("tiff", {"dpi": 600})):
+        fig.savefig(output.with_suffix("." + extension), bbox_inches="tight", **kwargs)
+    plt.close(fig)
+    output.with_name(output.name + "_manifest.json").write_text(json.dumps({
+        "view": "top", "rotation": "0x,0y,0z",
+        "panels": [{"label": label, "structure": str(path.resolve())}
+                   for label, path in zip(labels, paths)],
+    }, indent=2))
+    output.with_name(output.name + "_caption.txt").write_text(
+        "Top views of the relaxed initial state, highest climbing-image transition-state "
+        "candidate, and relaxed final state. ASE standard element colours and radii are "
+        "used; the periodic unit cell is shown.\n"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("result", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--initial-label", default="Initial state")
     parser.add_argument("--final-label", default="Final state")
+    parser.add_argument("--initial-structure", type=Path)
+    parser.add_argument("--transition-state-structure", type=Path)
+    parser.add_argument("--final-structure", type=Path)
     args = parser.parse_args()
     plot_barrier(args.result, args.output, args.initial_label, args.final_label)
+    structure_paths = (args.initial_structure, args.transition_state_structure, args.final_structure)
+    if any(structure_paths) and not all(structure_paths):
+        parser.error("top views require --initial-structure, --transition-state-structure, and --final-structure")
+    if all(structure_paths):
+        plot_top_views(*structure_paths, args.output.with_name("structure_top_views"),
+                       args.initial_label, args.final_label)
     print(args.output)
 
 

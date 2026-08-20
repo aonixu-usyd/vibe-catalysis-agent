@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 from ase import Atoms
+from ase.io import write
 
 from vibe_agent import parse_prompt
 from predict_adsorption import (
@@ -16,7 +17,7 @@ from predict_adsorption import (
     hydrogen_reference, molecule_template,
 )
 from visualize_results import classify_che_comparison, compute_che_states, reaction_rows
-from plot_barrier import plot_barrier
+from plot_barrier import plot_barrier, plot_top_views
 
 
 ROOT = Path(__file__).resolve().parent
@@ -144,6 +145,20 @@ def offline_tests():
             assert output.with_suffix("." + suffix).is_file()
         assert output.with_name("barrier_diagram_source_data.csv").is_file()
         assert output.with_name("barrier_diagram_caption.txt").is_file()
+        structures = []
+        for name, distance in (("initial", 2.2), ("transition_state", 1.6), ("final", 1.1)):
+            path = temporary / f"{name}.extxyz"
+            write(path, Atoms("Pt2N2", positions=[(0, 0, 0), (2, 2, 0),
+                                                   (0.8, 0.8, 1.5),
+                                                   (0.8 + distance, 0.8, 1.5)],
+                              cell=[5, 5, 10], pbc=[True, True, False]))
+            structures.append(path)
+        top_views = temporary / "structure_top_views"
+        plot_top_views(*structures, top_views, "2N*", r"N$_2$* + *")
+        for suffix in ("svg", "pdf", "png", "tiff"):
+            assert top_views.with_suffix("." + suffix).is_file()
+        assert top_views.with_name("structure_top_views_manifest.json").is_file()
+        assert top_views.with_name("structure_top_views_caption.txt").is_file()
     print(f"PASS: {len(CASES)} dataset parser cases, {len(auto_cases) + len(expanded_cases)} generated-surface parser cases, uploaded-structure planning/site discovery, fcc/bcc/hcp builders, constraints/orientations, and 1 safety rejection")
 
 

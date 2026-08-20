@@ -51,6 +51,8 @@ It has three deliberately separated modes:
 - UMA NEB/CI-NEB forward/reverse activation barriers and TS candidates.
 - Automatic CatMAP-style barrier diagrams for every completed NEB/CI-NEB run (SVG, PDF,
   PNG, TIFF, source CSV, and caption text).
+- Automatic initial-state/TS-candidate/final-state top views for every barrier run, with
+  ASE element colours and the periodic unit cell (SVG, PDF, PNG, TIFF, and JSON manifest).
 - Ideal single-site mean-field steady-state microkinetics from elementary barriers.
 - Nature/CatMAP-style pathway figures in SVG, PDF, TIFF, and PNG with source data.
 

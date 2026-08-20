@@ -41,6 +41,10 @@ transition-state peak. Export SVG, PDF, 300 dpi PNG, 600 dpi TIFF, source CSV, a
 text beside `barrier.json`; use chemically meaningful endpoint labels when known. This
 diagram represents the optimized state and barrier energies, while `neb_energies.csv`
 preserves the discrete image energies for convergence inspection.
+Also export a three-panel top-view figure of the relaxed initial state, transition-state
+candidate, and relaxed final state, using ASE standard element colours/radii and showing
+the periodic unit cell. Save this structure figure as SVG, PDF, 300 dpi PNG, and 600 dpi
+TIFF with a JSON structure manifest and caption text.
 
 ## Run microkinetics
 

@@ -47,10 +47,11 @@ def main():
               "reverse_barrier_eV": energies[ts] - energies[-1], "reaction_energy_eV": energies[-1] - energies[0],
               "optimizer_steps": int(opt.nsteps), "energies": rows,
               "scientific_warning": "UMA NEB prediction; validate important saddles with consistent DFT and frequencies."}
-    result_path = out / "barrier.json"; result_path.write_text(json.dumps(result, indent=2)); write(out / "transition_state_candidate.extxyz", images[ts])
+    result_path = out / "barrier.json"; result_path.write_text(json.dumps(result, indent=2)); ts_path = out / "transition_state_candidate.extxyz"; write(ts_path, images[ts])
     subprocess.run([sys.executable, str(Path(__file__).with_name("plot_barrier.py")), str(result_path),
                     "--output", str(out / "barrier_diagram"), "--initial-label", a.initial_label,
-                    "--final-label", a.final_label], check=True)
+                    "--final-label", a.final_label, "--initial-structure", str(a.initial.resolve()),
+                    "--transition-state-structure", str(ts_path), "--final-structure", str(a.final.resolve())], check=True)
     print(json.dumps(result, indent=2))
 
 
