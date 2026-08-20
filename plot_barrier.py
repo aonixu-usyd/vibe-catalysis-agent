@@ -13,6 +13,8 @@ import numpy as np
 from ase.io import read
 from ase.visualize.plot import plot_atoms
 
+ASE_GUI_RADII = 0.90
+
 
 def _smooth_segment(x0, x1, y0, y1, n=80):
     t = np.linspace(0.0, 1.0, n)
@@ -89,9 +91,9 @@ def plot_top_views(initial_path, transition_state_path, final_path, output,
     paths = [Path(initial_path), Path(transition_state_path), Path(final_path)]
     atoms = [read(path, -1) for path in paths]
     labels = [initial_label, "TS candidate", final_label]
-    fig, axes = plt.subplots(1, 3, figsize=(9.0, 3.2), constrained_layout=True)
+    fig, axes = plt.subplots(1, 3, figsize=(10.2, 3.8), constrained_layout=True)
     for ax, structure, label in zip(axes, atoms, labels):
-        plot_atoms(structure, ax=ax, rotation="0x,0y,0z", show_unit_cell=1, radii=0.72)
+        plot_atoms(structure, ax=ax, rotation="0x,0y,0z", show_unit_cell=1, radii=ASE_GUI_RADII)
         ax.set_title(label, fontsize=10, pad=8)
         ax.set_facecolor("#F8FAFC")
     fig.suptitle("NEB structures · top view", fontsize=12, weight="bold")
@@ -121,8 +123,8 @@ def plot_combined(result_path, initial_path, transition_state_path, final_path, 
     ea, de = float(data["forward_barrier_eV"]), float(data["reaction_energy_eV"])
     structures = [read(Path(path), -1) for path in (initial_path, transition_state_path, final_path)]
     labels = [initial_label, "TS candidate", final_label]
-    fig = plt.figure(figsize=(8.8, 6.8), constrained_layout=True)
-    grid = fig.add_gridspec(2, 3, height_ratios=(1.5, 1.0))
+    fig = plt.figure(figsize=(10.2, 7.4), constrained_layout=True)
+    grid = fig.add_gridspec(2, 3, height_ratios=(1.0, 1.18))
     ax = fig.add_subplot(grid[0, :]); color = "#1756D8"
     ax.hlines(0.0, 0.15, 0.85, color=color, lw=2.2)
     x1, y1 = _smooth_segment(0.85, 1.5, 0.0, ea); x2, y2 = _smooth_segment(1.5, 2.15, ea, de)
@@ -135,7 +137,7 @@ def plot_combined(result_path, initial_path, transition_state_path, final_path, 
     ax.set_ylim(min(0.0, de) - max(0.45, 6 * pad), max(ea, de, 0.0) + max(0.55, 7 * pad))
     ax.spines[["top", "right", "bottom"]].set_visible(False)
     for i, (structure, label) in enumerate(zip(structures, labels)):
-        view = fig.add_subplot(grid[1, i]); plot_atoms(structure, ax=view, rotation="0x,0y,0z", show_unit_cell=1, radii=0.72)
+        view = fig.add_subplot(grid[1, i]); plot_atoms(structure, ax=view, rotation="0x,0y,0z", show_unit_cell=1, radii=ASE_GUI_RADII)
         view.set_title(label, fontsize=9); view.set_facecolor("#F8FAFC")
     fig.suptitle("Reaction barrier and structures", fontsize=13, weight="bold")
     output = Path(output)

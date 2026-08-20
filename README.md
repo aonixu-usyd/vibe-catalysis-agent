@@ -47,7 +47,7 @@ It has three deliberately separated modes:
 - CO C-down/O-down enumeration; three azimuths for larger C/O/H intermediates.
 - Bottom-layer constraints, geometry checks, candidate table, and best structure.
 - Automatic publication-style energy graphics with ASE-native relaxed-structure
-  top views, standard element colours/radii, and the periodic unit cell.
+  top views, ASE GUI-like large atom radii, standard element colours, and the periodic unit cell.
 - UMA NEB/CI-NEB forward/reverse activation barriers and TS candidates.
 - Automatic CatMAP-style barrier diagrams for every completed NEB/CI-NEB run (SVG, PDF,
   PNG, TIFF, source CSV, and caption text).

@@ -78,11 +78,13 @@ text beside `barrier.json`; use chemically meaningful endpoint labels when known
 diagram represents the optimized state and barrier energies, while `neb_energies.csv`
 preserves the discrete image energies for convergence inspection.
 Also export a three-panel top-view figure of the relaxed initial state, transition-state
-candidate, and relaxed final state, using ASE standard element colours/radii and showing
+candidate, and relaxed final state, using ASE GUI-like large atom radii (scale 0.90),
+ASE standard element colours, and showing
 the periodic unit cell. Save this structure figure as SVG, PDF, 300 dpi PNG, and 600 dpi
 TIFF with a JSON structure manifest and caption text.
 The primary single-step deliverable must combine the energy diagram and the three aligned
-top views in one figure. For a sequential multi-step mechanism, render one continuous
+top views in one figure. Give the structure row at least as much vertical space as the
+energy row; never shrink atom radii merely to fit the layout. For a sequential multi-step mechanism, render one continuous
 cumulative-energy path with every state level and TS peak; annotate every elementary
 forward barrier and reaction energy, and align top views of every stable state and
 available TS candidate beneath their reaction-coordinate positions. Never connect

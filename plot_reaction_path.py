@@ -9,6 +9,7 @@ from ase.io import read
 from ase.visualize.plot import plot_atoms
 
 COLORS={"pcet":"#3266A8","coupled":"#25897C","decoupled-proton":"#B56A3B","decoupled-electron":"#7655A6","chemical":"#586174"}
+ASE_GUI_RADII=.90
 
 def curve(ax,x0,xts,x1,e0,ets,e1,color):
     t=np.linspace(0,1,40); smooth=.5-.5*np.cos(np.pi*t)
@@ -17,7 +18,7 @@ def curve(ax,x0,xts,x1,e0,ets,e1,color):
 
 def top_view(ax,path,title):
     if not path or not Path(path).is_file(): ax.axis("off"); ax.set_title(title,fontsize=7); return
-    plot_atoms(read(path,-1),ax=ax,rotation="0x,0y,0z",show_unit_cell=1,radii=.68)
+    plot_atoms(read(path,-1),ax=ax,rotation="0x,0y,0z",show_unit_cell=1,radii=ASE_GUI_RADII)
     ax.set_title(title,fontsize=7,pad=4); ax.set_facecolor("#F8FAFC")
 
 def main():
@@ -30,7 +31,7 @@ def main():
         state_ids=[steps[0]["reactant"]]+[s["product"] for s in steps]; energies=[0.0]
         for step in steps: energies.append(energies[-1]+float(step["delta_G_approx_eV"]))
         positions=np.arange(0,2*len(state_ids),2); panels=2*len(steps)+1
-        fig=plt.figure(figsize=(max(8.0,2.05*panels),6.4),constrained_layout=True); grid=fig.add_gridspec(2,panels,height_ratios=(1.65,1)); ax=fig.add_subplot(grid[0,:])
+        fig=plt.figure(figsize=(max(8.0,2.25*panels),7.2),constrained_layout=True); grid=fig.add_gridspec(2,panels,height_ratios=(1.0,1.18)); ax=fig.add_subplot(grid[0,:])
         for i,(sid,e,x) in enumerate(zip(state_ids,energies,positions)):
             ax.hlines(e,x-.42,x+.42,color="#162033",lw=2.4); ax.text(x,e+.05,f"{e:+.2f}",ha="center",fontsize=7)
             source.append({"order":2*i,"kind":"state","label":states[sid].get("label",sid),"relative_energy_eV":e})

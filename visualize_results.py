@@ -16,6 +16,8 @@ import numpy as np
 from ase.io import read
 from ase.visualize.plot import plot_atoms
 
+ASE_GUI_RADII = 0.90
+
 plt.rcParams.update({
     "font.family": "serif",
     "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
@@ -80,7 +82,7 @@ def draw_top_view(ax, atoms, title: str) -> None:
         ax=ax,
         rotation="0x,0y,0z",
         show_unit_cell=1,
-        radii=0.72,
+        radii=ASE_GUI_RADII,
     )
     ax.set_title(title, fontsize=12, color=INK, pad=9, weight="bold")
     ax.set_facecolor(PAPER)
