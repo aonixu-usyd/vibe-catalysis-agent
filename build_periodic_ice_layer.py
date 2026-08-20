@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Match and build a periodic Ice-Ih(0001)-like layer on a catalyst slab."""
+"""Build compact, periodic, ice-like water networks on catalyst slabs.
+
+Hexagonal surfaces use a coincidence-matched Ih(0001)-like oxygen net.  Square
+fcc(100) surfaces use a buckled 4x3 / 8-water interface motif (2/3 ML), which is
+the smallest validated rectangular motif that retains a useful periodic
+hydrogen-bond network without forcing every oxygen into one plane.
+"""
 
 import argparse, json
 from itertools import product
@@ -73,9 +79,85 @@ def water_oxygen_net(matrix,target_cell,oo_distance):
     oxygen.set_cell(target_cell,scale_atoms=False);oxygen.set_scaled_positions(scaled);return oxygen
 
 
+# Fractional xy positions and heights above the top metal layer for a compact
+# 4x3 fcc(100), 8-H2O buckled network.  The motif is based on a relaxed
+# periodic Cu(100) interface; heights are regularised (rather than copied
+# exactly) so it remains a neutral starting geometry on other fcc metals.
+SQUARE_4X3_XY = np.array([
+    [.3274, .2043], [.1013, .3576], [.1205, .7028], [.8932, .1766],
+    [.6653, .3545], [.8750, .8450], [.6294, .7443], [.3793, .8745],
+])
+SQUARE_4X3_Z = np.array([3.85, 3.20, 3.85, 4.05, 4.00, 3.20, 4.05, 3.25])
+SQUARE_4X3_HDIRS = np.array([
+    [[ .562, .613,-.500],[ .225,-.887,-.353]],
+    [[ .800,-.502, .264],[-.009,-.034,-.982]],
+    [[ .792, .408,-.387],[-.013,-.911,-.360]],
+    [[-.076,-.856,-.468],[ .715, .479,-.466]],
+    [[-.355,-.050,-.898],[ .857,-.480,-.043]],
+    [[ .873,-.399, .192],[-.056, .008,-.979]],
+    [[ .034,-.966,-.091],[ .804, .296,-.464]],
+    [[ .855,-.377, .279],[ .027,-.039,-.979]],
+])
+
+
+def square_4x3_water_layer(slab):
+    """Return a neutral buckled 8-water motif for a rectangular 4x3 surface."""
+    lengths=slab.cell.lengths()[:2]; angle=float(slab.cell.angles()[2])
+    ratio=max(lengths)/min(lengths)
+    if abs(angle-90.) > 3. or abs(ratio-4/3) > .08:
+        raise ValueError("The compact square-water motif requires an approximately rectangular 4x3 surface cell")
+    xy=SQUARE_4X3_XY.copy()
+    # Rotate the fractional motif when the long cell vector is y rather than x.
+    if lengths[1] > lengths[0]: xy=xy[:, ::-1]
+    top_z=float(max(slab.positions[:,2])); atoms=slab.copy(); groups=[]
+    for frac,zoff,hdirs in zip(xy,SQUARE_4X3_Z,SQUARE_4X3_HDIRS):
+        pos=frac[0]*slab.cell[0]+frac[1]*slab.cell[1]
+        pos[2]=top_z+zoff; start=len(atoms); atoms+=Atom("O",pos)
+        atoms+=Atom("H",pos+.97*unit(hdirs[0])); atoms+=Atom("H",pos+.97*unit(hdirs[1]))
+        groups.append([start,start+1,start+2])
+    return atoms,groups
+
+
+def water_network_metrics(atoms,water_indices,oo_cutoff=3.15,hbond_cutoff=2.25):
+    """Measure periodic O connectivity and directional hydrogen bonds."""
+    oxygens=[g[0] for g in water_indices]; hydrogens=[h for g in water_indices for h in g[1:]]
+    oo_degree=[]; accepted=[]
+    for oi in oxygens:
+        oo_degree.append(int(sum(atoms.get_distance(oi,oj,mic=True)<=oo_cutoff for oj in oxygens if oj!=oi)))
+        accepted.append(int(sum(atoms.get_distance(oi,h,mic=True)<=hbond_cutoff for h in hydrogens
+                                if atoms.get_distance(oi,h,mic=True)>1.20)))
+    z=np.array([atoms.positions[i,2] for i in oxygens])
+    return {"periodic_oxygen_coordination":oo_degree,
+            "hydrogen_bond_acceptor_contacts":accepted,
+            "oxygen_height_range_A":[float(z.min()),float(z.max())],
+            "oxygen_buckling_A":float(np.ptp(z)),
+            "oo_cutoff_A":float(oo_cutoff),"hbond_cutoff_A":float(hbond_cutoff)}
+
+
 def build_periodic_ice_layer_on_slab(slab,oo_distance=2.76,max_strain=.08,max_substrate_area=4,
-                                     allow_substrate_expansion=True,fixed_layers=2):
+                                     allow_substrate_expansion=True,fixed_layers=2,
+                                     interface_family="auto"):
     requested_area=inplane_area(slab.cell);requested_angle=float(slab.cell.angles()[2])
+    lengths=slab.cell.lengths()[:2]; angle=float(slab.cell.angles()[2])
+    square=(abs(angle-90.)<=3. and abs(max(lengths)/min(lengths)-4/3)<=.08)
+    if interface_family=="square-4x3" or (interface_family=="auto" and square):
+        levels=sorted(set(np.round(slab.positions[:,2],6)))
+        fixed=[i for i,z in enumerate(slab.positions[:,2]) if any(abs(z-level)<.05 for level in levels[:fixed_layers])]
+        atoms,water_indices=square_4x3_water_layer(slab); atoms.set_constraint(FixAtoms(indices=fixed))
+        atoms.set_tags([1]*len(slab)+[2]*(3*len(water_indices)))
+        metrics=water_network_metrics(atoms,water_indices)
+        if min(metrics["periodic_oxygen_coordination"])<1 or min(metrics["hydrogen_bond_acceptor_contacts"])<1:
+            raise RuntimeError(f"Buckled square water network failed connectivity validation: {metrics}")
+        metadata={"status":"constructed_only_no_UMA_no_relaxation",
+                  "water_layer":"compact periodic buckled ice-like fcc(100) 4x3 motif",
+                  "water_count_rule":"smallest validated rectangular fcc(100) motif; 2/3 ML for 12 surface atoms",
+                  "n_water":len(water_indices),"nominal_coverage_ML":2/3,
+                  "surface_area_A2":inplane_area(slab.cell),"surface_angle_degree":angle,
+                  "requested_surface_area_A2":requested_area,"requested_surface_angle_degree":requested_angle,
+                  "fixed_atom_indices_zero_based":fixed,"water_atom_indices_zero_based":water_indices,
+                  "validation":metrics,
+                  "warning":"Constructed buckled ice-like initial model; relax, inspect, and sample proton orderings before quantitative interpretation."}
+        return atoms,metadata
     match=match_periodic_ice(slab.cell,oo_distance,max_strain,max_substrate_area,allow_substrate_expansion)
     slab=make_supercell(slab,embed(match["substrate_matrix"]),wrap=True)
     levels=sorted(set(np.round(slab.positions[:,2],6)))
@@ -114,6 +196,7 @@ def build_periodic_ice_layer_on_slab(slab,oo_distance=2.76,max_strain=.08,max_su
               "surface_angle_degree":float(slab.cell.angles()[2]),"requested_surface_area_A2":requested_area,
               "requested_surface_angle_degree":requested_angle,"periodic_oxygen_coordination":[graph.degree[n] for n in graph],
               "fixed_atom_indices_zero_based":fixed,"water_atom_indices_zero_based":water_indices,
+              "validation":water_network_metrics(atoms,water_indices),
               "warning":"Constructed matched ice-like initial model; relax and inspect before interpreting energies."}
     return atoms,metadata
 
@@ -121,7 +204,7 @@ def build_periodic_ice_layer_on_slab(slab,oo_distance=2.76,max_strain=.08,max_su
 def build_periodic_ice_layer(metal="Pt",facet="111",size=None,lattice_a=None,layers=4,vacuum=10.,fixed_layers=2,**options):
     reference=reference_states[atomic_numbers[metal]]
     if not reference or reference.get("symmetry")!="fcc": raise ValueError("Automatic elemental generation supports fcc metals; upload other prepared slabs")
-    lattice_a=float(lattice_a or reference["a"]);facet=str(facet).replace("(","").replace(")","");xy=tuple(size or ((3,3) if facet=="111" else (2,2)))
+    lattice_a=float(lattice_a or reference["a"]);facet=str(facet).replace("(","").replace(")","");xy=tuple(size or ((3,3) if facet=="111" else ((4,3) if facet=="100" else (2,2))))
     builder={"111":fcc111,"100":fcc100,"110":fcc110}.get(facet)
     if builder is None: raise ValueError("Automatic matched-ice generation supports fcc(111/100/110); upload other slabs")
     kwargs={"size":(*xy,layers),"a":lattice_a,"vacuum":vacuum}
@@ -132,8 +215,8 @@ def build_periodic_ice_layer(metal="Pt",facet="111",size=None,lattice_a=None,lay
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument("--metal",default="Pt");p.add_argument("--facet",default="111");p.add_argument("--structure",type=Path);p.add_argument("--size",nargs=2,type=int);p.add_argument("--lattice-a",type=float);p.add_argument("--layers",type=int,default=4);p.add_argument("--vacuum",type=float,default=10.);p.add_argument("--fixed-layers",type=int,default=2);p.add_argument("--ice-oo-distance",type=float,default=2.76);p.add_argument("--max-strain",type=float,default=.08);p.add_argument("--max-substrate-area",type=int,default=4);p.add_argument("--fixed-catalyst-cell",action="store_true");p.add_argument("--output",type=Path,required=True);a=p.parse_args()
-    options={"oo_distance":a.ice_oo_distance,"max_strain":a.max_strain,"max_substrate_area":a.max_substrate_area,"allow_substrate_expansion":not a.fixed_catalyst_cell,"fixed_layers":a.fixed_layers}
+    p=argparse.ArgumentParser();p.add_argument("--metal",default="Pt");p.add_argument("--facet",default="111");p.add_argument("--structure",type=Path);p.add_argument("--size",nargs=2,type=int);p.add_argument("--lattice-a",type=float);p.add_argument("--layers",type=int,default=4);p.add_argument("--vacuum",type=float,default=10.);p.add_argument("--fixed-layers",type=int,default=2);p.add_argument("--ice-oo-distance",type=float,default=2.76);p.add_argument("--max-strain",type=float,default=.08);p.add_argument("--max-substrate-area",type=int,default=4);p.add_argument("--fixed-catalyst-cell",action="store_true");p.add_argument("--interface-family",choices=("auto","honeycomb","square-4x3"),default="auto");p.add_argument("--output",type=Path,required=True);a=p.parse_args()
+    options={"oo_distance":a.ice_oo_distance,"max_strain":a.max_strain,"max_substrate_area":a.max_substrate_area,"allow_substrate_expansion":not a.fixed_catalyst_cell,"fixed_layers":a.fixed_layers,"interface_family":a.interface_family}
     if a.structure: atoms,metadata=build_periodic_ice_layer_on_slab(read(a.structure.resolve(),-1),**options);metadata["surface_source"]=str(a.structure.resolve())
     else: atoms,metadata=build_periodic_ice_layer(a.metal,a.facet,a.size,a.lattice_a,a.layers,a.vacuum,**options)
     out=a.output.resolve();out.mkdir(parents=True,exist_ok=False);write(out/"periodic_ice_interface.extxyz",atoms);write(out/"periodic_ice_interface.traj",atoms);write(out/"periodic_ice_interface.cif",atoms);write(out/"POSCAR",atoms,format="vasp",direct=True,sort=False);(out/"structure_manifest.json").write_text(json.dumps(metadata,indent=2));print(out)

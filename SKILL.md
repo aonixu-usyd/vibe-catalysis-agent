@@ -27,11 +27,15 @@ rank accepted candidates, and preserve structured CSV/JSON and relaxed structure
 
 When a request combines a water/aqueous environment with an electrochemical
 hydrogenation or dehydrogenation barrier, default to an explicit periodic ice-like
-interface. Run `build_periodic_ice_layer.py`, which matches the catalyst's in-plane
-vectors to an Ice-Ih(0001)-like honeycomb using integer coincidence supercells. Determine
+interface. Run `build_periodic_ice_layer.py`. Hexagonal surfaces are matched to an
+Ice-Ih(0001)-like honeycomb using integer coincidence supercells; near-square fcc(100)
+surfaces default to the compact buckled 4x3/8-water (2/3 ML) periodic motif. Never force
+all water oxygens into one plane. Determine
 the water count from the matched surface area, cell lengths/angle, ice O-O spacing, and
 reported strain; never assume six waters. If a fixed catalyst cell has no acceptable
 match, enlarge the catalyst supercell or stop rather than distort the layer silently.
+Prefer the smallest validated periodic cell. Require the generated manifest to pass
+periodic O-network and directional hydrogen-bond checks before starting UMA or NEB.
 The matched water layer and catalyst must both be periodic in-plane, and all water atoms
 must remain present with identical ordering within each endpoint pair and NEB. Construct
 and present top/side views before energy calculations. Do not replace

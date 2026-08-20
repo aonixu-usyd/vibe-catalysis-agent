@@ -176,7 +176,10 @@ python predict_adsorption.py \
 For electrochemical hydrogenation/dehydrogenation barriers requested in water,
 the natural-language planner defaults to `build_periodic_ice_layer.py`. It searches
 integer catalyst/ice coincidence cells and derives the number of H-bond-connected waters
-from surface area, in-plane shape/angle, Ice-Ih O-O spacing, and allowed strain. The
+from surface area, in-plane shape/angle, Ice-Ih O-O spacing, and allowed strain. Square
+fcc(100) surfaces instead use a compact, buckled 4x3/8-water periodic network (2/3 ML),
+with explicit periodic connectivity and hydrogen-bond validation. Water is not constrained
+to a common z plane. The
 3x3 Pt(111) six-water model is one matched example, not a universal default. It writes EXTXYZ, TRAJ, CIF,
 POSCAR, and a structure manifest without loading UMA. Use the resulting
 interface to create atom-identical endpoints before NEB/CI-NEB.
