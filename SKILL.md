@@ -27,11 +27,14 @@ rank accepted candidates, and preserve structured CSV/JSON and relaxed structure
 
 When a request combines a water/aqueous environment with an electrochemical
 hydrogenation or dehydrogenation barrier, default to an explicit periodic ice-like
-interface. Run `build_periodic_ice_layer.py`: use a 3x3 fcc(111) catalyst slab and six
-waters at 2/3 ML in a periodic H-down `(sqrt(3)xsqrt(3))R30-degree` honeycomb, with
-bottom catalyst layers fixed. The six waters and catalyst must both be periodic in-plane,
-and all water atoms must remain present with identical ordering in every endpoint and NEB
-image. Construct and present top/side views before energy calculations. Do not replace
+interface. Run `build_periodic_ice_layer.py`, which matches the catalyst's in-plane
+vectors to an Ice-Ih(0001)-like honeycomb using integer coincidence supercells. Determine
+the water count from the matched surface area, cell lengths/angle, ice O-O spacing, and
+reported strain; never assume six waters. If a fixed catalyst cell has no acceptable
+match, enlarge the catalyst supercell or stop rather than distort the layer silently.
+The matched water layer and catalyst must both be periodic in-plane, and all water atoms
+must remain present with identical ordering within each endpoint pair and NEB. Construct
+and present top/side views before energy calculations. Do not replace
 the layer with a finite water cluster. Treat this as the default initial interface, not a
 room-temperature liquid ensemble; sample proton orderings when quantitative conclusions
 depend on the water network. For non-fcc(111) surfaces, do not silently force this
@@ -46,8 +49,9 @@ ionic endpoint is unstable without charge/potential, report that limitation inst
 changing the reaction.
 
 For consecutive aqueous hydrogenation/dehydrogenation paths, construct every elementary
-step independently from stable-state structures that share the same pristine periodic
-water template. Keep the same number and ordering of solvent oxygen atoms in every step.
+step independently from stable-state structures that share the same matched pristine
+periodic water template. Keep the water count and ordering derived for that catalyst
+coincidence cell consistent within the pathway; this count depends on the surface model.
 In particular, a dehydrogenation step's initial water coordinates must come from the
 shared pristine template, never from the previous step's final hydronium/OH-like water
 structure. Only reaction energies and barriers are accumulated into the continuous plot;

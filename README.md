@@ -174,9 +174,10 @@ python predict_adsorption.py \
 ### Reaction barriers and mechanisms
 
 For electrochemical hydrogenation/dehydrogenation barriers requested in water,
-the natural-language planner defaults to `build_periodic_ice_layer.py`. For
-fcc(111) this constructs a 3x3 catalyst slab with six H-bond-connected waters
-in the periodic 2/3-ML H-down hexagonal motif. It writes EXTXYZ, TRAJ, CIF,
+the natural-language planner defaults to `build_periodic_ice_layer.py`. It searches
+integer catalyst/ice coincidence cells and derives the number of H-bond-connected waters
+from surface area, in-plane shape/angle, Ice-Ih O-O spacing, and allowed strain. The
+3x3 Pt(111) six-water model is one matched example, not a universal default. It writes EXTXYZ, TRAJ, CIF,
 POSCAR, and a structure manifest without loading UMA. Use the resulting
 interface to create atom-identical endpoints before NEB/CI-NEB.
 

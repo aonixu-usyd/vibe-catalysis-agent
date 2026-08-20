@@ -31,10 +31,11 @@ authenticate through Hugging Face. Access and model weights are not bundled.
 
 When the request combines a water/aqueous environment with an electrochemical
 hydrogenation or dehydrogenation barrier, use the repository's
-`build_periodic_ice_layer.py` before endpoint construction. The default fcc(111)
-interface is a 3x3 slab plus six waters (2/3 ML) in a periodic H-down
-`(sqrt(3)xsqrt(3))R30-degree` honeycomb. Both catalyst and water layer are periodic
-in-plane. Preserve every water atom and its ordering in all endpoints and NEB images,
+`build_periodic_ice_layer.py` before endpoint construction. Match the catalyst in-plane
+cell to an Ice-Ih(0001)-like honeycomb using integer coincidence supercells. Derive water
+count from surface area, vector lengths/angle, ice O-O spacing, and strain; never hardcode
+six waters. Both catalyst and water layer are periodic in-plane. Preserve the matched
+water template and atom ordering within every endpoint pair and NEB,
 and show top and side views before running UMA. Never substitute a finite six-water
 cluster. This is a constructed ice-like starting interface rather than a liquid ensemble;
 for other facets or lattices, validate a periodic coincidence cell instead of silently
@@ -45,8 +46,8 @@ H from the nearest water to the surface/adsorbate and leaves an OH-minus-like do
 aqueous dehydrogenation transfers surface/adsorbate H to the nearest water and creates an
 H3O-plus-like acceptor. Never substitute H* on a spare metal site when the requested
 reaction is proton transfer to/from water. For a multistep path, rebuild each step from
-stable-state structures sharing one pristine periodic water template. Preserve solvent
-oxygen count/order, never inherit a previous final water geometry as the next initial
+stable-state structures sharing one matched pristine periodic water template. Preserve
+the surface-specific water count/order, never inherit a previous final water geometry as the next initial
 geometry, and combine only the independently calculated energies/barriers in the plot.
 
 Extract:

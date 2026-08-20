@@ -41,13 +41,26 @@ CASES = [
 def offline_tests():
     aqueous = parse_prompt("在水环境中计算Pt111表面电化学加氢步的反应能垒")
     assert aqueous["mode"] == "aqueous_electrochemical_barrier"
-    assert aqueous["interface_model"]["water_count"] == 6
+    assert aqueous["interface_model"]["water_count"] == "derive_from_catalyst_ice_coincidence_cell"
     assert aqueous["interface_model"]["preserve_water_atoms_in_all_neb_images"]
     assert aqueous["aqueous_hydrogen_transfer_semantics"]["forbid_Hstar_substitution"]
     assert not aqueous["multistep_solvent_policy"]["inherit_previous_final_water_coordinates"]
     hydrated, ice_metadata = build_periodic_ice_layer("Pt", lattice_a=3.92)
     assert hydrated.get_chemical_formula() == "H12O6Pt36"
     assert ice_metadata["periodic_oxygen_coordination"] == [3] * 6
+    pt100_hydrated, pt100_metadata = build_periodic_ice_layer(
+        "Pt", "100", (2, 2), lattice_a=3.92, max_substrate_area=4)
+    assert pt100_metadata["water_count_rule"].endswith("never fixed")
+    assert pt100_metadata["n_water"] != 6
+    assert pt100_metadata["n_water"] == len(pt100_metadata["water_atom_indices_zero_based"])
+    assert abs(pt100_metadata["requested_surface_angle_degree"] - 90.0) < 1e-8
+    try:
+        build_periodic_ice_layer("Pt", "100", (2, 2), lattice_a=3.92,
+                                 allow_substrate_expansion=False)
+    except ValueError as error:
+        assert "No ice coincidence cell" in str(error)
+    else:
+        raise AssertionError("A fixed 2x2 Pt(100) cell incorrectly accepted a forced ice layer")
     for oxygen, h1, h2 in ice_metadata["water_atom_indices_zero_based"]:
         assert abs(hydrated.get_distance(oxygen, h1, mic=True) - .97) < 1e-6
         assert abs(hydrated.get_angle(h1, oxygen, h2, mic=True) - 104.5) < 1e-6

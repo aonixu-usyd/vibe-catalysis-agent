@@ -165,8 +165,9 @@ def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
             "interface_model": {
                 "explicit_water": True,
                 "default_builder": "build_periodic_ice_layer.py",
-                "water_count": 6,
-                "coverage_ML": 2 / 3,
+                "water_count": "derive_from_catalyst_ice_coincidence_cell",
+                "coverage": "derive_from_surface_area_cell_shape_ice_OO_spacing_and_strain",
+                "coincidence_builder": "build_periodic_ice_layer.py",
                 "periodicity": "catalyst and water layer periodic in-plane",
                 "motif": "H-down (sqrt(3)xsqrt(3))R30-degree hexagonal honeycomb",
                 "preserve_water_atoms_in_all_neb_images": True,
@@ -181,7 +182,7 @@ def parse_prompt(prompt: str, uploaded_structure: str | None = None) -> dict:
             "multistep_solvent_policy": {
                 "shared_pristine_water_template": True,
                 "build_each_step_independently": True,
-                "same_water_oxygen_count_each_step": True,
+                "same_matched_water_template_each_step": True,
                 "inherit_previous_final_water_coordinates": False,
                 "combine_only_reaction_energies_and_barriers": True,
             },
